@@ -691,51 +691,86 @@ function buildWriteSegment(u,segIdx){
 
 function initCanvas(){const chars=window._p3Chars;if(!chars)return;const sizes=window._p3TileSizes||[];chars.forEach((ch,i)=>{const dc=document.getElementById('p3-draw-'+i);if(!dc)return;const sz=sizes[i]||60;const clone=dc.cloneNode(true);dc.parentNode.replaceChild(clone,dc);const fc=document.getElementById('p3-draw-'+i);fc.width=sz;fc.height=sz;const ctx=fc.getContext('2d');ctx.lineCap='round';ctx.lineJoin='round';ctx.lineWidth=Math.max(2,sz*0.025);ctx.strokeStyle='#3C4043';let d=false;function gp(e){const r=fc.getBoundingClientRect(),cx=e.touches?e.touches[0].clientX:e.clientX,cy=e.touches?e.touches[0].clientY:e.clientY;return{x:(cx-r.left)*(fc.width/r.width),y:(cy-r.top)*(fc.height/r.height)};}fc.addEventListener('mousedown',e=>{e.preventDefault();d=true;hasWritten=true;const p=gp(e);ctx.beginPath();ctx.moveTo(p.x,p.y);});fc.addEventListener('mousemove',e=>{if(!d)return;e.preventDefault();const p=gp(e);ctx.lineTo(p.x,p.y);ctx.stroke();});fc.addEventListener('mouseup',()=>d=false);fc.addEventListener('touchstart',e=>{e.preventDefault();d=true;hasWritten=true;const p=gp(e);ctx.beginPath();ctx.moveTo(p.x,p.y);},{passive:false});fc.addEventListener('touchmove',e=>{if(!d)return;e.preventDefault();const p=gp(e);ctx.lineTo(p.x,p.y);ctx.stroke();},{passive:false});fc.addEventListener('touchend',()=>d=false);});hasWritten=false;}
 
-function clearAllTiles(){const chars=window._p3Chars;if(!chars)return;chars.forEach((c,i)=>{const cv=document.getElementById('p3-draw-'+i);if(cv)cv.getContext('2d').clearRect(0,0,cv.width,cv.height);const bx=document.getElementById('p3-box-'+i);if(bx)bx.style.boxShadow='0 1px 4px rgba(0,0,0,0.3)';});hasWritten=false;}
+function clearAllTiles(){const chars=window._p3Chars;if(!chars)return;chars.forEach((c,i)=>{const cv=document.getElementById('p3-draw-'+i);if(cv)cv.getContext('2d').clearRect(0,0,cv.width,cv.height);const bx=document.getElementById('p3-box-'+i);if(bx){bx.style.boxShadow='0 1px 4px rgba(0,0,0,0.3)';const old=bx.querySelector('.ocr-label');if(old)old.remove();}});hasWritten=false;}
+
+function showOcrLabel(box,text,isError){
+  const old=box.querySelector('.ocr-label');if(old)old.remove();
+  const el=document.createElement('div');el.className='ocr-label';
+  el.textContent=text;
+  el.style.cssText='position:absolute;bottom:2px;left:50%;transform:translateX(-50%);padding:2px 7px;border-radius:8px;font-size:0.55rem;font-weight:700;white-space:nowrap;z-index:10;pointer-events:none;text-align:center;'
+    +(isError?'background:rgba(196,135,122,0.92);color:#F0EBE1;':'background:rgba(143,168,139,0.9);color:#F0EBE1;');
+  box.style.position='relative';box.appendChild(el);
+  setTimeout(()=>{if(el.parentNode)el.remove();},10000);
+}
 
 async function submitSegment(){
   if(!hasWritten){showToast('請先寫字！✍️');return;}
   const chars=window._p3Chars;if(!chars)return;let ok=0;
 
   if(GEMINI_KEY){
-    // ═══ Multi-image batch OCR: all chars in 1 API call ═══
+    // Loading overlay with timer
+    const overlay=document.createElement('div');overlay.id='ocr-loading';
+    overlay.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(30,30,36,0.88);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#F0EBE1;font-family:inherit;';
+    overlay.innerHTML='<div style="font-size:1.2rem;font-weight:700;margin-bottom:8px;">🧠 AI 辨識中…</div>'
+      +'<div id="ocr-timer" style="font-size:2.2rem;font-weight:900;color:#C9B88C;font-family:monospace;">0.0s</div>'
+      +'<div style="font-size:0.7rem;color:#8B8780;margin-top:8px;">'+chars.length+' 個字一次辨識</div>';
+    document.body.appendChild(overlay);
+    const t0=Date.now();
+    const tid=setInterval(()=>{const el=document.getElementById('ocr-timer');if(el)el.textContent=((Date.now()-t0)/1000).toFixed(1)+'s';},100);
+
+    // Multi-image batch OCR
     const parts=[];const validIdx=[];
     for(let i=0;i<chars.length;i++){
       const cv=document.getElementById('p3-draw-'+i);if(!cv)continue;
-      const img=cv.toDataURL('image/png').split(',')[1];
-      parts.push({inlineData:{mimeType:'image/png',data:img}});
+      parts.push({inlineData:{mimeType:'image/png',data:cv.toDataURL('image/png').split(',')[1]}});
       validIdx.push(i);
     }
-    // Build prompt: list target chars with index
     const targetList=validIdx.map((vi,pi)=>'圖'+(pi+1)+'→「'+chars[vi]+'」').join('、');
-    parts.push({text:'你是手寫日文辨識器。以下'+validIdx.length+'張圖片分別是手寫的日文字。\n'
+    parts.push({text:'你是手寫日文辨識器。以下 '+validIdx.length+' 張圖片是手寫的日文字。\n'
       +'對照目標：'+targetList+'\n'
-      +'逐張判斷手寫的字是否與目標一致。回傳純 JSON 陣列，每個元素格式：{"idx":圖片編號從1開始,"target":"目標字","seen":"你辨識到的字","ok":true或false}\n'
-      +'範例：[{"idx":1,"target":"初","seen":"初","ok":true},{"idx":2,"target":"め","seen":"あ","ok":false}]'});
+      +'逐張判斷是否正確。回傳純 JSON 陣列（無 markdown），格式：\n'
+      +'[{"idx":1,"target":"目標字","seen":"辨識到的字","ok":true/false}]\n'
+      +'每張圖必須有一筆結果，idx 從 1 開始。'});
 
     try{
       const data=await callGemini({contents:[{parts}]},{maxRetry:1});
       const txt=data.candidates?.[0]?.content?.parts?.[0]?.text||'';
-      const results=JSON.parse(txt.replace(/```json|```/g,'').trim());
-      // Apply results to UI
+      let results;try{results=JSON.parse(txt.replace(/```json|```/g,'').trim());}catch(pe){results=[];}
       const resMap=new Map();
-      (Array.isArray(results)?results:[]).forEach(r=>{if(typeof r.idx==='number')resMap.set(r.idx,r);});
+      (Array.isArray(results)?results:[]).forEach(r=>{const idx=typeof r.idx==='number'?r.idx:parseInt(r.idx);if(!isNaN(idx))resMap.set(idx,r);});
       validIdx.forEach((vi,pi)=>{
         const bx=document.getElementById('p3-box-'+vi);if(!bx)return;
+        bx.style.position='relative';
+        const old=bx.querySelector('.ocr-label');if(old)old.remove();
         const r=resMap.get(pi+1);
-        if(r&&r.ok===true){bx.style.boxShadow='0 0 0 3px #00e676';ok++;}
-        else if(r){bx.style.boxShadow='0 0 0 3px #C4877A';}
-        else{bx.style.boxShadow='0 0 0 3px #00e676';ok+=0.5;}// no result for this idx → partial credit
+        const label=document.createElement('div');label.className='ocr-label';
+        label.style.cssText='position:absolute;bottom:2px;left:50%;transform:translateX(-50%);padding:2px 7px;border-radius:8px;font-size:0.55rem;font-weight:700;white-space:nowrap;z-index:10;pointer-events:none;text-align:center;';
+        if(r&&r.ok===true){
+          bx.style.boxShadow='0 0 0 3px #00e676';ok++;
+          label.style.background='rgba(143,168,139,0.9)';label.style.color='#F0EBE1';
+          label.textContent='✅ '+(r.seen||chars[vi]);
+        }else if(r){
+          bx.style.boxShadow='0 0 0 3px #C4877A';
+          label.style.background='rgba(196,135,122,0.92)';label.style.color='#F0EBE1';
+          label.textContent='❌ AI:「'+(r.seen||'？')+'」';
+        }else{
+          bx.style.boxShadow='0 0 0 3px #00e676';ok+=0.5;
+          label.style.background='rgba(201,184,140,0.8)';label.style.color='#1E1E24';
+          label.textContent='⚠️ 無結果';
+        }
+        bx.appendChild(label);
+        setTimeout(()=>{if(label.parentNode)label.remove();},10000);
       });
     }catch(e){
-      // Fallback: give partial credit to all
       if(e.message==='QUOTA')showToast('⏳ 配額用完，以基本分計算');
       else if(e.message==='BAD_KEY')showToast('❌ Key 無效');
+      else showToast('OCR 失敗');
       chars.forEach((_,i)=>{const bx=document.getElementById('p3-box-'+i);if(bx)bx.style.boxShadow='0 0 0 3px #00e676';});
       ok=chars.length*0.5;
     }
+    clearInterval(tid);const ov=document.getElementById('ocr-loading');if(ov)ov.remove();
+
   }else{
-    // No API key → auto-pass all
     chars.forEach((_,i)=>{const bx=document.getElementById('p3-box-'+i);if(bx)bx.style.boxShadow='0 0 0 3px #00e676';});
     ok=chars.length;
   }
@@ -745,7 +780,7 @@ async function submitSegment(){
   setTimeout(()=>{document.querySelector('.score-popup')?.remove();
     if(_writeSegIdx+1<_writeSegs.length){showToast('✍️ 第'+(_writeSegIdx+2)+'/'+_writeSegs.length+' 段');buildWriteSegment(currentUnit,_writeSegIdx+1);}
     else{showToast('🎉 整句完成！');setTimeout(()=>{if(curVerse<chapterVerses.length){curVerse++;renderVersePills();loadVerse(curVerse);saveProgress();}},1500);}
-  },2000);
+  },5000);
 }
 
 // ═══ BONUS ═══
