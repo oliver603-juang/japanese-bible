@@ -134,7 +134,8 @@ body{font-family:'Noto Sans TC','M PLUS Rounded 1c',sans-serif;background:var(--
 <body>
 <div class="modal-overlay" id="settings-modal"><div class="modal">
 <h2>⚙️ 設定</h2>
-<div style="margin-bottom:14px;"><label>🧠 Gemini API Key（文法分析＋手寫辨識＋舊約經文）</label><input type="password" id="gemini-key-input" placeholder="AIza..."><div style="font-size:0.6rem;color:var(--text-muted);margin-top:3px;">免費申請：<a href="https://aistudio.google.com/apikey" target="_blank" style="color:var(--accent)">Google AI Studio</a>（每日 1500 次）</div></div>
+<div style="margin-bottom:14px;"><label>🧠 Gemini API Key（文法分析＋手寫辨識＋舊約經文）</label><input type="password" id="gemini-key-input" placeholder="AIza..."><div style="font-size:0.6rem;color:var(--text-muted);margin-top:3px;">免費申請：<a href="https://aistudio.google.com/apikey" target="_blank" style="color:var(--accent)">Google AI Studio</a>（每日 1500 次）</div>
+<div style="font-size:0.6rem;color:var(--text-muted);margin-top:6px;display:flex;align-items:center;gap:6px;">🤖 目前模型：<span id="current-model" style="color:var(--gold);font-family:monospace;">—</span><button onclick="resetModel()" style="margin-left:auto;padding:2px 8px;border:1px solid var(--border);background:transparent;color:var(--text-dim);border-radius:6px;font-size:0.55rem;font-family:inherit;cursor:pointer;">重設為 2.5</button></div></div>
 <div style="padding:10px;background:rgba(255,255,255,0.03);border-radius:10px;border:1px solid var(--border);margin-bottom:14px;">
 <label>🧹 維護工具</label>
 <div style="display:flex;gap:6px;margin-top:6px;">
@@ -227,7 +228,9 @@ NT:[
 {id:'3JN',name:'Ⅲヨハネ',ch:1},{id:'JUD',name:'ユダ',ch:1},{id:'REV',name:'黙示録',ch:22}]};
 const NT_IDS=ALL_BOOKS.NT.map(b=>b.id);
 const BIBLE_API='https://bible.helloao.org/api/jpn_loc';
-const GEMINI_MODEL='gemini-2.0-flash';
+// Model fallback chain: tried in order if 404/UNAVAILABLE. 2.5-flash is the current best free-tier model (Apr 2026).
+const GEMINI_MODELS=['gemini-2.5-flash','gemini-flash-latest','gemini-2.0-flash'];
+let GEMINI_MODEL=localStorage.getItem('bible-gemini-model')||GEMINI_MODELS[0];
 
 // ═══ STATE ═══
 let GEMINI_KEY='',curTestament='NT',curBook='JHN',curChapter=1,curVerse=1;
@@ -298,7 +301,8 @@ function startSpeech(){
 }
 
 // ═══ SETTINGS ═══
-function openSettings(){document.getElementById('settings-modal').classList.add('open');document.getElementById('gemini-key-input').value=GEMINI_KEY;countCache();populateMasteryDisplay();}
+function openSettings(){document.getElementById('settings-modal').classList.add('open');document.getElementById('gemini-key-input').value=GEMINI_KEY;document.getElementById('current-model').textContent=GEMINI_MODEL;countCache();populateMasteryDisplay();}
+function resetModel(){GEMINI_MODEL=GEMINI_MODELS[0];try{localStorage.setItem('bible-gemini-model',GEMINI_MODEL);}catch(e){}document.getElementById('current-model').textContent=GEMINI_MODEL;showToast('🔄 已重設為 '+GEMINI_MODEL);}
 function closeSettings(){document.getElementById('settings-modal').classList.remove('open');}
 function saveSettings(){GEMINI_KEY=document.getElementById('gemini-key-input').value.trim();localStorage.setItem('bible-gemini-key',GEMINI_KEY);closeSettings();}
 function clearCacheReload(){if(!confirm('清除快取並重新載入？'))return;caches.keys().then(k=>Promise.all(k.map(c=>caches.delete(c)))).then(()=>navigator.serviceWorker?.getRegistrations()).then(r=>r?Promise.all(r.map(x=>x.unregister())):0).then(()=>location.reload(true)).catch(()=>location.reload(true));}
@@ -353,13 +357,57 @@ function renderVersePills(){
 }
 
 // ═══ LOAD VERSE: cache → Gemini → fallback ═══
-async function analyzeWithGemini(prompt){
+// Unified Gemini caller with:
+//  - 429 retry (parses retryDelay from Google's error, max 2 retries, capped 8s)
+//  - Model fallback chain (404/UNAVAILABLE → switch to next model & remember)
+//  - Used by both text analysis and handwriting OCR
+async function callGemini(body,opts){
   if(!GEMINI_KEY)throw new Error('NO_KEY');
-  const res=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+GEMINI_MODEL+':generateContent?key='+GEMINI_KEY,{
-    method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({contents:[{parts:[{text:GRAMMAR_PROMPT+'\n\n【經文】\n'+prompt}]}],generationConfig:{responseMimeType:'application/json'}})
-  });
-  const data=await res.json();const raw=data.candidates?.[0]?.content?.parts?.[0]?.text||'';
+  opts=opts||{};const maxRetry=opts.maxRetry??2;
+  let lastErr=null;
+  for(let mi=0;mi<GEMINI_MODELS.length;mi++){
+    const model=mi===0?GEMINI_MODEL:GEMINI_MODELS[mi];
+    if(mi>0&&model===GEMINI_MODEL)continue;// already tried as primary
+    for(let attempt=0;attempt<=maxRetry;attempt++){
+      try{
+        const res=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+model+':generateContent?key='+GEMINI_KEY,{
+          method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)
+        });
+        if(res.ok){
+          if(model!==GEMINI_MODEL){GEMINI_MODEL=model;try{localStorage.setItem('bible-gemini-model',model);}catch(e){}showToast('🔄 已切換到 '+model);}
+          return await res.json();
+        }
+        const errData=await res.json().catch(()=>({error:{code:res.status,message:res.statusText}}));
+        const code=errData?.error?.code||res.status;
+        const status=errData?.error?.status||'';
+        if(code===429&&attempt<maxRetry){
+          // Parse retryDelay (e.g. "52s") from Google's response
+          let waitMs=Math.min(8000,2000*Math.pow(2,attempt));
+          const retryInfo=errData?.error?.details?.find(d=>d['@type']?.includes('RetryInfo'));
+          if(retryInfo?.retryDelay){const m=retryInfo.retryDelay.match(/(\d+(?:\.\d+)?)s/);if(m){const s=parseFloat(m[1]);if(s<10)waitMs=Math.ceil(s*1000)+200;}}
+          if(opts.onRetry)opts.onRetry(attempt+1,maxRetry,Math.ceil(waitMs/1000));
+          await new Promise(r=>setTimeout(r,waitMs));continue;
+        }
+        if(code===404||status==='NOT_FOUND'||status==='UNAVAILABLE'){lastErr=new Error('MODEL_'+code+'_'+model);break;}// try next model
+        if(code===429){lastErr=new Error('QUOTA');break;}// final attempt failed → don't try other models, same quota
+        if(code===400&&errData?.error?.message?.includes('API key')){throw new Error('BAD_KEY');}
+        throw new Error('API_'+code+': '+(errData?.error?.message||'unknown').slice(0,80));
+      }catch(e){
+        if(e.message==='BAD_KEY'||e.message==='QUOTA')throw e;
+        if(attempt>=maxRetry){lastErr=e;break;}
+        await new Promise(r=>setTimeout(r,1500));
+      }
+    }
+  }
+  throw lastErr||new Error('ALL_MODELS_FAILED');
+}
+
+async function analyzeWithGemini(prompt){
+  const data=await callGemini({
+    contents:[{parts:[{text:GRAMMAR_PROMPT+'\n\n【經文】\n'+prompt}]}],
+    generationConfig:{responseMimeType:'application/json'}
+  },{onRetry:(n,max,sec)=>showToast('⏳ 配額限制，'+sec+'秒後重試 ('+n+'/'+max+')')});
+  const raw=data.candidates?.[0]?.content?.parts?.[0]?.text||'';
   return JSON.parse(raw.replace(/```json|```/g,'').trim());
 }
 
@@ -382,7 +430,15 @@ async function loadVerse(num){
       unit.fullTts=unit.chunks.map(c=>c.tts||c.text).join('');
       unit.book=curBook;unit.chapter=curChapter;unit.verse=num;
       localStorage.setItem(ck,JSON.stringify(unit));renderVersePills();
-    }catch(e){if(e.message==='NO_KEY')showToast('請先設定 Gemini API Key ⚙️');else showToast('AI 分析失敗');}
+    }catch(e){
+      const msg=e.message||'';
+      if(msg==='NO_KEY')showToast('請先設定 Gemini API Key ⚙️');
+      else if(msg==='BAD_KEY')showToast('❌ API Key 無效，請重設 ⚙️');
+      else if(msg==='QUOTA')showToast('⏳ 配額用完，請稍後再試或明天 16:00 重置');
+      else if(msg.startsWith('MODEL_'))showToast('❌ 模型不可用，已嘗試所有備援');
+      else if(msg.startsWith('API_'))showToast('❌ '+msg);
+      else showToast('AI 分析失敗：'+msg.slice(0,40));
+    }
   }
   // 3. Fallback: bible.js pre-compiled
   if(!unit&&typeof BIBLE_DATA!=='undefined'){
@@ -638,9 +694,19 @@ function clearAllTiles(){const chars=window._p3Chars;if(!chars)return;chars.forE
 
 async function submitSegment(){
   if(!hasWritten){showToast('請先寫字！✍️');return;}
-  const chars=window._p3Chars;if(!chars)return;let ok=0;
+  const chars=window._p3Chars;if(!chars)return;let ok=0,quotaHit=false;
   for(let i=0;i<chars.length;i++){const bx=document.getElementById('p3-box-'+i),cv=document.getElementById('p3-draw-'+i);if(!cv||!bx)continue;
-    if(GEMINI_KEY){try{const img=cv.toDataURL('image/png').split(',')[1];const res=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+GEMINI_MODEL+':generateContent?key='+GEMINI_KEY,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts:[{inlineData:{mimeType:'image/png',data:img}},{text:'手寫日文辨識。目標：'+chars[i]+'\n回傳JSON：{"char":"字"}'}]}]})});const data=await res.json();const txt=data.candidates?.[0]?.content?.parts?.[0]?.text||'';const p=JSON.parse(txt.replace(/```json|```/g,'').trim());if(p.char===chars[i]){bx.style.boxShadow='0 0 0 3px #00e676';ok++;}else{bx.style.boxShadow='0 0 0 3px #C4877A';}}catch(e){ok+=0.5;}}
+    if(GEMINI_KEY&&!quotaHit){try{
+      const img=cv.toDataURL('image/png').split(',')[1];
+      const data=await callGemini({contents:[{parts:[{inlineData:{mimeType:'image/png',data:img}},{text:'手寫日文辨識。目標：'+chars[i]+'\n回傳JSON：{"char":"字"}'}]}]},{maxRetry:1});
+      const txt=data.candidates?.[0]?.content?.parts?.[0]?.text||'';
+      const p=JSON.parse(txt.replace(/```json|```/g,'').trim());
+      if(p.char===chars[i]){bx.style.boxShadow='0 0 0 3px #00e676';ok++;}else{bx.style.boxShadow='0 0 0 3px #C4877A';}
+    }catch(e){
+      // On quota error, stop hammering API for remaining chars - score them as 0.5 (partial credit)
+      if(e.message==='QUOTA'||e.message==='BAD_KEY'){quotaHit=true;showToast(e.message==='QUOTA'?'⏳ 配額用完，剩餘字以基本分計算':'❌ Key 無效');}
+      ok+=0.5;
+    }}
     else{bx.style.boxShadow='0 0 0 3px #00e676';ok++;}}
   const pct=ok/chars.length,score=Math.round(pct*12);totalScore+=score;
   showScorePopup(score,pct>=0.9?'完美！':pct>=0.6?'不錯！':'繼續加油');updateProgress();saveProgress();
