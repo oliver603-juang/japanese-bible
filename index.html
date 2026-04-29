@@ -177,8 +177,8 @@
 
 <!-- METRO GRID -->
 <div class="metro-grid" id="metro-grid">
-  <!-- LISTEN bar (compact: sentence + 🐢🔊🎤 buttons) -->
-  <div class="tile t-listen">
+  <!-- LISTEN bar (compact: 🐢慢速 🎤語音) -->
+  <div class="tile t-listen" onclick="playPhase1('normal')">
     <div style="display:flex;align-items:center;gap:6px;">
       <div style="flex:1;min-width:0;">
         <div class="listen-sentence" id="listen-display"></div>
@@ -187,10 +187,9 @@
           <span id="listen-ref" style="font-size:0.45rem;color:rgba(60,64,67,0.3);"></span>
         </div>
       </div>
-      <div style="display:flex;gap:3px;flex-shrink:0;">
-        <button onclick="event.stopPropagation();playPhase1('slow')" style="width:28px;height:28px;border:1px solid rgba(60,64,67,0.15);border-radius:50%;background:rgba(255,255,255,0.12);color:var(--stroke);font-size:0.55rem;cursor:pointer;display:flex;align-items:center;justify-content:center;">🐢</button>
-        <button onclick="event.stopPropagation();playPhase1('normal')" style="width:28px;height:28px;border:1px solid rgba(60,64,67,0.15);border-radius:50%;background:rgba(255,255,255,0.12);color:var(--stroke);font-size:0.55rem;cursor:pointer;display:flex;align-items:center;justify-content:center;">🔊</button>
-        <button onclick="event.stopPropagation();startSpeech()" style="width:28px;height:28px;border:1px solid rgba(60,64,67,0.15);border-radius:50%;background:rgba(255,255,255,0.12);color:var(--stroke);font-size:0.55rem;cursor:pointer;display:flex;align-items:center;justify-content:center;">🎤</button>
+      <div style="display:flex;gap:8px;flex-shrink:0;">
+        <button onclick="event.stopPropagation();playPhase1('slow')" style="width:40px;height:40px;border:2px solid rgba(60,64,67,0.2);border-radius:50%;background:rgba(255,255,255,0.2);color:var(--stroke);font-size:0.85rem;cursor:pointer;display:flex;align-items:center;justify-content:center;">🐢</button>
+        <button onclick="event.stopPropagation();startSpeech()" style="width:40px;height:40px;border:2px solid rgba(60,64,67,0.2);border-radius:50%;background:rgba(255,255,255,0.2);color:var(--stroke);font-size:0.85rem;cursor:pointer;display:flex;align-items:center;justify-content:center;">🎤</button>
       </div>
     </div>
     <div id="speak-result" style="font-size:0.45rem;color:rgba(60,64,67,0.4);text-align:right;min-height:10px;margin-top:1px;"></div>
@@ -303,16 +302,16 @@ if(SR){recognition=new SR();recognition.lang='ja-JP';recognition.interimResults=
 function startSpeech(){
   if(!recognition){document.getElementById('speak-result').textContent='瀏覽器不支援';return;}
   const u=getUnit();if(!u)return;
-  const mb=document.getElementById('mic-btn'),rd=document.getElementById('speak-result');
-  mb.classList.add('listening');rd.textContent='聆聽中…';rd.className='speak-result';
-  recognition.start();
-  recognition.onresult=e=>{mb.classList.remove('listening');const t=e.results[0][0].transcript;
+  const rd=document.getElementById('speak-result');
+  rd.textContent='🔴 聆聽中…';rd.className='speak-result';
+  try{recognition.start();}catch(e){recognition.stop();setTimeout(()=>{rd.textContent='🔴 聆聽中…';recognition.start();},300);return;}
+  recognition.onresult=e=>{const t=e.results[0][0].transcript;
     let mc=0;u.roleplay.acceptKeywords.forEach(kw=>{if(t.includes(kw))mc++;});
     if(mc>0){rd.textContent='🎉 太棒了！「'+t+'」';rd.className='speak-result ok';}
     else{rd.textContent='你說了「'+t+'」🧐 再試！';rd.className='speak-result ng';}
   };
-  recognition.onerror=()=>{mb.classList.remove('listening');rd.textContent='聽不清楚，再試！';};
-  recognition.onend=()=>mb.classList.remove('listening');
+  recognition.onerror=()=>{rd.textContent='聽不清楚，再試！';rd.className='speak-result ng';};
+  recognition.onend=()=>{if(rd.textContent==='🔴 聆聽中…')rd.textContent='點擊 🎤 開口唸';};
 }
 
 // ══════════════════════════════════════════
@@ -333,7 +332,7 @@ function buildWrite(u){
   if(!u)return;const sentence=u.fullSentence,chars=[...sentence],typeMap=getCharTypeMap(u);
   const writeTile=document.querySelector('.t-write');if(!writeTile)return;
   writeTile.innerHTML='';writeTile.style.cssText+='display:flex;flex-direction:column;padding:6px 10px;';
-  const hd=document.createElement('div');hd.style.cssText='display:flex;align-items:center;justify-content:space-between;flex-shrink:0;margin-bottom:3px;gap:4px;';hd.innerHTML='<div style="display:flex;gap:4px;align-items:center;"><button onclick="clearAllTiles()" style="padding:2px 8px;border:none;border-radius:8px;font-size:0.55rem;font-weight:700;cursor:pointer;background:rgba(60,64,67,0.15);color:#3C4043;">❌ 重寫</button><button onclick="submitAllTiles()" style="padding:2px 8px;border:none;border-radius:8px;font-size:0.55rem;font-weight:700;cursor:pointer;background:#C4877A;color:#F0EBE1;">🔍 交卷</button></div><span style="font-size:0.65rem;font-weight:700;color:#F0EBE1;">🇹🇼 '+u.translation+'</span>';writeTile.appendChild(hd);
+  const hd=document.createElement('div');hd.style.cssText='display:flex;align-items:center;justify-content:space-between;flex-shrink:0;margin-bottom:3px;gap:4px;position:relative;z-index:10;';hd.innerHTML='<div style="display:flex;gap:4px;align-items:center;"><button onclick="clearAllTiles()" style="padding:4px 10px;border:none;border-radius:8px;font-size:0.65rem;font-weight:700;cursor:pointer;background:rgba(60,64,67,0.2);color:#3C4043;">❌ 重寫</button><button onclick="submitAllTiles()" style="padding:4px 10px;border:none;border-radius:8px;font-size:0.65rem;font-weight:700;cursor:pointer;background:#C4877A;color:#F0EBE1;">🔍 交卷</button></div><span style="font-size:0.65rem;font-weight:700;color:#F0EBE1;">🇹🇼 '+u.translation+'</span>';writeTile.appendChild(hd);
   const vw=writeTile.getBoundingClientRect().width-20,vh=writeTile.getBoundingClientRect().height-30,gap=3;
   let bestCols=6,bestCell=30;
   for(let cols=3;cols<=7;cols++){const cW=Math.floor((vw-gap*(cols+1))/cols),rows=simPack(chars,cols);if(!rows)continue;const cH=Math.floor((vh-gap*(rows+1))/rows),c=Math.min(cW,cH,200);if(c>bestCell){bestCell=c;bestCols=cols;}}
