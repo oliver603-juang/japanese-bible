@@ -1,405 +1,412 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="聖經特訓">
-  <meta name="theme-color" content="#1E1E24">
-  <link rel="manifest" href="manifest.json">
-  <link rel="apple-touch-icon" href="icon-180.png">
-  <link rel="icon" type="image/png" sizes="64x64" href="icon-64.png">
-  <title>日文聖經特訓班</title>
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&family=Noto+Sans+JP:wght@400;700;900&family=M+PLUS+Rounded+1c:wght@400;700;900&display=swap" rel="stylesheet">
-  <style>
-    :root {
-      --bg: #1E1E24; --surface: #2A2B2E; --border: #3A3B3E;
-      --text: #F0EBE1; --text-dim: #A09D96; --text-muted: #6B6860;
-      --tile-noun: #8FA88B; --tile-verb: #7B9DAB; --tile-particle: #C4877A;
-      --tile-adj: #C9B88C; --tile-dark: #9B9B8E; --tile-other: #A8A49B;
-      --accent: #C4877A; --gold: #C9B88C;
-      --stroke: #3C4043; --gap: 4px; --radius: 6px;
-    }
-    *{box-sizing:border-box;margin:0;padding:0;}
-    body{font-family:'Noto Sans TC','M PLUS Rounded 1c',sans-serif;background:var(--bg);color:var(--text);height:100dvh;display:flex;flex-direction:column;overflow:hidden;user-select:none;-webkit-user-select:none;}
-    .hidden{display:none!important;}
-
-    /* ═══ TOP BAR ═══ */
-    .top-bar{display:flex;align-items:center;padding:8px 12px;gap:8px;flex-shrink:0;}
-    .app-logo{font-size:0.9rem;font-weight:900;color:var(--gold);flex:1;letter-spacing:1px;}
-    .countdown-badge{font-size:0.65rem;color:var(--text-dim);background:var(--surface);padding:3px 10px;border-radius:12px;}
-    .gear-btn{width:30px;height:30px;border:none;border-radius:50%;background:var(--surface);color:var(--text-dim);font-size:0.9rem;cursor:pointer;display:flex;align-items:center;justify-content:center;}
-
-    /* ═══ VERSE NAV ═══ */
-    .verse-scroll{display:flex;gap:4px;padding:4px 12px;overflow-x:auto;scrollbar-width:none;flex-shrink:0;}
-    .verse-scroll::-webkit-scrollbar{display:none;}
-    .verse-pill{padding:4px 10px;border:1px solid var(--border);border-radius:var(--radius);background:transparent;color:var(--text-muted);font-size:0.7rem;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0;}
-    .verse-pill.active{background:var(--accent);color:var(--bg);border-color:var(--accent);}
-    .verse-pill.done{background:var(--tile-noun);color:var(--bg);border-color:var(--tile-noun);}
-
-    /* ═══ METRO GRID ═══ */
-    .metro-grid{flex:1;display:grid;grid-template-columns:1fr;grid-template-rows:auto 1fr auto;gap:var(--gap);padding:var(--gap) 8px;overflow:hidden;min-height:0;}
-    .tile{border-radius:var(--radius);padding:10px;position:relative;overflow:hidden;cursor:pointer;display:flex;flex-direction:column;transition:transform 0.1s;}
-    .tile:active{transform:scale(0.97);}
-    .t-listen:active, .t-write:active, .t-bonus:active{transform:none;}
-    .t-listen button:active{transform:scale(0.85);transition:transform 0.1s;}
-    .tile-label{font-size:0.5rem;font-weight:700;color:rgba(60,64,67,0.5);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;}
-
-    /* Tile colors */
-    .t-listen{background:var(--tile-verb);padding:6px 10px;}
-    .t-write{background:var(--tile-noun);min-height:0;flex:1;}
-    .t-bonus{background:var(--surface);border:1px solid var(--border);cursor:pointer;}
-
-    /* ═══ LISTEN TILE ═══ */
-    .listen-sentence{font-family:'M PLUS Rounded 1c','Noto Sans JP',sans-serif;font-size:clamp(1rem,4vw,1.6rem);font-weight:900;line-height:1.5;display:flex;flex-wrap:wrap;gap:1px;align-items:baseline;}
-    .chunk-wrap{display:inline-flex;align-items:baseline;padding:1px 2px;border-radius:4px;transition:all 0.2s;}
-    .chunk-wrap.active-chunk{background:rgba(60,64,67,0.15);transform:scale(1.05);}
-    .chunk-ruby{display:inline-flex;flex-direction:column;align-items:center;line-height:1;}
-    .chunk-ruby .furigana{font-size:0.35em;color:rgba(60,64,67,0.5);margin-bottom:1px;}
-    .chunk-char{color:var(--stroke);transition:color 0.3s;}
-    .color-noun-green{color:#2D5A3D!important;} .color-verb-blue{color:#2A4A5A!important;} .color-particle-red{color:#6A3A34!important;}
-    .listen-ref{font-size:0.55rem;color:rgba(60,64,67,0.4);margin-top:2px;}
-    .listen-trans{font-size:0.75rem;color:rgba(60,64,67,0.6);margin-top:2px;}
-    .listen-btns{display:flex;gap:4px;margin-top:4px;}
-    .listen-btn{padding:3px 8px;border:1px solid rgba(60,64,67,0.2);border-radius:10px;background:rgba(255,255,255,0.15);color:var(--stroke);font-size:0.55rem;cursor:pointer;font-family:inherit;}
-
-    /* ═══ SPEAK TILE ═══ */
-    .speak-inner{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;gap:4px;}
-    .mic-big{font-size:1.8rem;background:transparent;border:none;cursor:pointer;transition:transform 0.2s;}
-    .mic-big.listening{animation:pulse-mic 1s infinite;}
-    @keyframes pulse-mic{0%,100%{transform:scale(1)}50%{transform:scale(1.3)}}
-    .speak-result{font-size:0.6rem;color:var(--stroke);text-align:center;min-height:16px;}
-    .speak-result.ok{color:#2D5A3D;font-weight:700;}
-    .speak-result.ng{color:#6A3A34;}
-
-    /* ═══ HINT TILE ═══ */
-    .hint-inner{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;gap:2px;}
-    .hint-emoji{font-size:1.5rem;}
-    .hint-title{font-size:0.55rem;color:var(--stroke);text-align:center;font-weight:700;}
-
-    /* ═══ WRITE TILE (canvas) ═══ */
-    .write-inner{position:relative;flex:1;display:flex;flex-direction:column;min-height:0;}
-    .write-prompt{font-size:0.7rem;color:var(--stroke);text-align:center;font-weight:700;margin-bottom:2px;}
-    .write-grid{position:relative;flex:1;border-radius:4px;overflow:hidden;min-height:0;}
-    .write-grid canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;}
-    .write-grid .hint-cv{z-index:1;opacity:0.15;pointer-events:none;}
-    .write-grid .draw-cv{z-index:2;}
-    .write-btns{display:flex;gap:6px;justify-content:center;margin-top:4px;z-index:10;}
-    .write-btn{padding:4px 12px;border:none;border-radius:10px;font-family:inherit;font-size:0.65rem;font-weight:700;cursor:pointer;}
-    .write-btn.clear{background:rgba(60,64,67,0.15);color:var(--stroke);}
-    .write-btn.submit{background:var(--accent);color:var(--text);}
-
-    /* ═══ BONUS TILE ═══ */
-    .bonus-label{font-size:0.55rem;color:var(--text-dim);}
-    .bonus-title{font-size:0.7rem;color:var(--text);font-weight:700;margin-top:2px;}
-
-    /* ═══ MODALS ═══ */
-    .modal-overlay{display:none;position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.7);align-items:center;justify-content:center;padding:16px;}
-    .modal-overlay.open{display:flex;}
-    .modal{background:var(--bg);border:1px solid var(--border);border-radius:16px;padding:20px;max-width:400px;width:100%;max-height:85vh;overflow-y:auto;color:var(--text);}
-    .modal h2{font-size:1rem;margin-bottom:12px;}
-    .modal label{font-size:0.75rem;color:var(--text-dim);display:block;margin-bottom:4px;}
-    .modal input[type="password"]{width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface);color:var(--text);font-size:0.85rem;outline:none;}
-    .modal input:focus{border-color:var(--gold);}
-    .modal .hint-text{font-size:0.6rem;color:var(--text-muted);margin-top:3px;}
-    .modal .section{margin-bottom:14px;}
-    .modal-btns{display:flex;gap:8px;justify-content:flex-end;margin-top:14px;}
-    .modal-btn{padding:8px 18px;border:none;border-radius:14px;font-family:inherit;font-size:0.8rem;font-weight:600;cursor:pointer;}
-    .modal-btn.save{background:var(--accent);color:var(--text);}
-    .modal-btn.cancel{background:var(--surface);color:var(--text-dim);}
-
-    /* Bonus modal */
-    .bonus-modal{background:var(--bg);border:1px solid var(--border);border-radius:20px;padding:24px;max-width:360px;width:100%;text-align:center;}
-    .bonus-modal .bm-title{font-size:1rem;font-weight:700;color:var(--gold);margin-bottom:12px;}
-    .bonus-modal .bm-body{font-size:0.82rem;color:var(--text);line-height:1.8;padding:14px;background:var(--surface);border-radius:12px;margin-bottom:14px;text-align:left;}
-    .bonus-modal .bm-body b{color:var(--gold);}
-    .bonus-modal .bm-close{padding:8px 24px;border:none;border-radius:16px;background:var(--gold);color:var(--bg);font-family:inherit;font-size:0.9rem;font-weight:600;cursor:pointer;}
-
-    /* Score popup */
-    .score-popup{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) scale(0);background:var(--surface);border:2px solid var(--gold);padding:20px 30px;border-radius:20px;text-align:center;z-index:20000;}
-    .score-popup.show{animation:popScale 0.5s forwards;}
-    @keyframes popScale{0%{transform:translate(-50%,-50%) scale(0)}80%{transform:translate(-50%,-50%) scale(1.08)}100%{transform:translate(-50%,-50%) scale(1)}}
-    .score-val{font-size:2.5rem;font-weight:900;color:var(--gold);}
-    .score-desc{font-size:0.9rem;color:var(--text-dim);margin-top:4px;}
-
-    /* Toast */
-    .ocr-toast{position:fixed;bottom:60px;left:50%;transform:translateX(-50%);z-index:20000;padding:10px 20px;background:var(--surface);border:1px solid var(--border);border-radius:14px;display:flex;align-items:center;gap:10px;font-size:1rem;animation:fadeUp 0.3s ease;}
-    @keyframes fadeUp{from{opacity:0;transform:translateX(-50%) translateY(10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
-    .ocr-toast .ocr-seen{font-size:1.5rem;font-weight:900;}
-    .ocr-toast .ocr-ok{color:#8FA88B;} .ocr-toast .ocr-ng{color:#C4877A;}
-
-    /* Bottom progress */
-    .bottom-bar{display:flex;padding:6px 12px;gap:8px;align-items:center;flex-shrink:0;}
-    .progress-bar{flex:1;height:3px;background:var(--surface);border-radius:2px;overflow:hidden;}
-    .progress-fill{height:100%;background:var(--gold);transition:width 0.5s;}
-    .progress-label{font-size:0.6rem;color:var(--text-muted);white-space:nowrap;}
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="聖經特訓">
+<meta name="theme-color" content="#1E1E24">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" sizes="64x64" href="icon-64.png">
+<title>日文聖經特訓班</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&family=Noto+Sans+JP:wght@400;700;900&family=M+PLUS+Rounded+1c:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#1E1E24;--surface:#2A2B2E;--border:#3A3B3E;--text:#F0EBE1;--text-dim:#A09D96;--text-muted:#6B6860;--tile-noun:#8FA88B;--tile-verb:#7B9DAB;--tile-particle:#C4877A;--tile-adj:#C9B88C;--tile-other:#A8A49B;--accent:#C4877A;--gold:#C9B88C;--stroke:#3C4043;--gap:4px;--radius:6px;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Noto Sans TC','M PLUS Rounded 1c',sans-serif;background:var(--bg);color:var(--text);height:100dvh;display:flex;flex-direction:column;overflow:hidden;user-select:none;-webkit-user-select:none;}
+.hidden{display:none!important;}
+.top-bar{display:flex;align-items:center;padding:6px 12px;gap:6px;flex-shrink:0;}
+.app-logo{font-size:0.85rem;font-weight:900;color:var(--gold);flex:1;}
+.gear-btn{width:28px;height:28px;border:none;border-radius:50%;background:var(--surface);color:var(--text-dim);font-size:0.85rem;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+.nav-row{display:flex;gap:4px;padding:2px 12px 4px;flex-shrink:0;align-items:center;}
+.nav-select{padding:3px 6px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text);font-size:0.6rem;font-family:inherit;outline:none;max-width:35%;}
+.testament-btn{padding:4px 8px;border:none;font-size:0.6rem;font-weight:700;cursor:pointer;font-family:inherit;}
+.testament-btn.active{background:var(--accent);color:var(--text);}
+.testament-btn.inactive{background:var(--surface);color:var(--text-muted);}
+.verse-scroll{display:flex;gap:3px;overflow-x:auto;scrollbar-width:none;flex:1;}
+.verse-scroll::-webkit-scrollbar{display:none;}
+.verse-pill{padding:3px 7px;border:1px solid var(--border);border-radius:var(--radius);background:transparent;color:var(--text-muted);font-size:0.55rem;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0;font-family:inherit;}
+.verse-pill.active{background:var(--accent);color:var(--bg);border-color:var(--accent);}
+.verse-pill.cached{border-color:var(--tile-noun);color:var(--tile-noun);}
+.loading-bar{height:2px;background:var(--surface);flex-shrink:0;overflow:hidden;}
+.loading-bar.active .loading-fill{animation:loadSlide 1.5s infinite;}
+.loading-fill{height:100%;width:30%;background:var(--gold);}
+@keyframes loadSlide{0%{transform:translateX(-100%)}100%{transform:translateX(400%)}}
+.metro-grid{flex:1;display:grid;grid-template-columns:1fr;grid-template-rows:auto 1fr auto;gap:var(--gap);padding:var(--gap) 8px;overflow:hidden;min-height:0;}
+.tile{border-radius:var(--radius);padding:10px;position:relative;overflow:hidden;cursor:pointer;display:flex;flex-direction:column;transition:transform 0.1s;}
+.tile:active{transform:scale(0.97);}
+.t-listen:active,.t-write:active,.t-bonus:active{transform:none;}
+.t-listen button:active{transform:scale(0.85);transition:transform 0.1s;}
+.t-listen{background:var(--tile-verb);padding:6px 10px;}
+.t-write{background:var(--tile-noun);min-height:0;flex:1;}
+.t-bonus{background:var(--surface);border:1px solid var(--border);cursor:pointer;}
+.listen-sentence{font-family:'M PLUS Rounded 1c','Noto Sans JP',sans-serif;font-size:clamp(0.85rem,3.2vw,1.2rem);font-weight:900;line-height:1.5;display:flex;flex-wrap:wrap;gap:1px;align-items:baseline;}
+.chunk-wrap{display:inline-flex;align-items:baseline;padding:1px 2px;border-radius:4px;cursor:pointer;transition:all 0.2s;}
+.chunk-wrap.has-grammar{border-bottom:1.5px dashed rgba(60,64,67,0.3);}
+.chunk-wrap:active{background:rgba(255,255,255,0.15);}
+.chunk-ruby{display:inline-flex;flex-direction:column;align-items:center;line-height:1;}
+.chunk-ruby .furigana{font-size:0.35em;color:rgba(60,64,67,0.5);margin-bottom:1px;}
+.chunk-char{color:var(--stroke);}
+.color-noun-green{color:#2D5A3D!important;}.color-verb-blue{color:#2A4A5A!important;}.color-particle-red{color:#6A3A34!important;}
+.speak-result{font-size:0.5rem;color:rgba(60,64,67,0.5);text-align:right;min-height:12px;margin-top:1px;}
+.speak-result.ok{color:#2D5A3D;font-weight:700;}.speak-result.ng{color:#6A3A34;}
+.modal-overlay{display:none;position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.7);align-items:center;justify-content:center;padding:16px;}
+.modal-overlay.open{display:flex;}
+.modal{background:var(--bg);border:1px solid var(--border);border-radius:16px;padding:20px;max-width:400px;width:100%;max-height:85vh;overflow-y:auto;color:var(--text);}
+.modal h2{font-size:1rem;margin-bottom:12px;}
+.modal label{font-size:0.75rem;color:var(--text-dim);display:block;margin-bottom:4px;}
+.modal input[type="password"]{width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface);color:var(--text);font-size:0.85rem;outline:none;}
+.modal-btns{display:flex;gap:8px;justify-content:flex-end;margin-top:14px;}
+.modal-btn{padding:8px 18px;border:none;border-radius:14px;font-family:inherit;font-size:0.8rem;font-weight:600;cursor:pointer;}
+.modal-btn.save{background:var(--accent);color:var(--text);}
+.modal-btn.cancel{background:var(--surface);color:var(--text-dim);}
+.gm{background:var(--bg);border:1px solid var(--border);border-radius:20px;padding:24px;max-width:360px;width:100%;max-height:80vh;overflow-y:auto;}
+.gm .gm-title{font-size:1rem;font-weight:700;color:var(--gold);margin-bottom:12px;}
+.gm .gm-body{font-size:0.82rem;color:var(--text);line-height:1.8;padding:14px;background:var(--surface);border-radius:12px;margin-bottom:10px;text-align:left;}
+.gm .gm-body b{color:var(--gold);}
+.gm .gm-close{padding:8px 24px;border:none;border-radius:16px;background:var(--gold);color:var(--bg);font-family:inherit;font-size:0.9rem;font-weight:600;cursor:pointer;}
+.score-popup{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) scale(0);background:var(--surface);border:2px solid var(--gold);padding:20px 30px;border-radius:20px;text-align:center;z-index:20000;}
+.score-popup.show{animation:popScale 0.5s forwards;}
+@keyframes popScale{0%{transform:translate(-50%,-50%) scale(0)}80%{transform:translate(-50%,-50%) scale(1.08)}100%{transform:translate(-50%,-50%) scale(1)}}
+.score-val{font-size:2.5rem;font-weight:900;color:var(--gold);}
+.score-desc{font-size:0.9rem;color:var(--text-dim);margin-top:4px;}
+.ocr-toast{position:fixed;bottom:60px;left:50%;transform:translateX(-50%);z-index:20000;padding:10px 20px;background:var(--surface);border:1px solid var(--border);border-radius:14px;display:flex;align-items:center;gap:10px;font-size:1rem;animation:fadeUp 0.3s ease;}
+@keyframes fadeUp{from{opacity:0;transform:translateX(-50%) translateY(10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+.bottom-bar{display:flex;padding:4px 12px;gap:8px;align-items:center;flex-shrink:0;}
+.progress-bar{flex:1;height:3px;background:var(--surface);border-radius:2px;overflow:hidden;}
+.progress-fill{height:100%;background:var(--gold);transition:width 0.5s;}
+.progress-label{font-size:0.55rem;color:var(--text-muted);white-space:nowrap;}
+</style>
 </head>
 <body>
-
-<!-- SETTINGS MODAL -->
 <div class="modal-overlay" id="settings-modal"><div class="modal">
-  <h2>⚙️ 設定</h2>
-  <div class="section"><label>🧠 Gemini API Key（手寫辨識）</label><input type="password" id="gemini-key-input" placeholder="AIza..."><div class="hint-text">免費申請：<a href="https://aistudio.google.com/apikey" target="_blank" style="color:var(--accent)">Google AI Studio</a></div></div>
-  <div class="section" style="padding:10px;background:rgba(255,255,255,0.03);border-radius:10px;border:1px solid var(--border);">
-    <label>🧹 維護工具</label>
-    <div style="display:flex;gap:6px;margin-top:6px;">
-      <button class="modal-btn cancel" onclick="clearCacheReload()" style="flex:1;text-align:center;font-size:0.7rem;">🔄 清除快取</button>
-      <button class="modal-btn cancel" onclick="resetProgress()" style="flex:1;text-align:center;font-size:0.7rem;">🗑️ 重設進度</button>
-    </div>
-  </div>
-  <div class="modal-btns"><button class="modal-btn cancel" onclick="closeSettings()">取消</button><button class="modal-btn save" onclick="saveSettings()">✅ 儲存</button></div>
+<h2>⚙️ 設定</h2>
+<div style="margin-bottom:14px;"><label>🧠 Gemini API Key（文法分析＋手寫辨識＋舊約經文）</label><input type="password" id="gemini-key-input" placeholder="AIza..."><div style="font-size:0.6rem;color:var(--text-muted);margin-top:3px;">免費申請：<a href="https://aistudio.google.com/apikey" target="_blank" style="color:var(--accent)">Google AI Studio</a>（每日 1500 次）</div></div>
+<div style="padding:10px;background:rgba(255,255,255,0.03);border-radius:10px;border:1px solid var(--border);margin-bottom:14px;">
+<label>🧹 維護工具</label>
+<div style="display:flex;gap:6px;margin-top:6px;">
+<button class="modal-btn cancel" onclick="clearCacheReload()" style="flex:1;text-align:center;font-size:0.7rem;">🔄 清除快取</button>
+<button class="modal-btn cancel" onclick="resetProgress()" style="flex:1;text-align:center;font-size:0.7rem;">🗑️ 重設進度</button>
+</div>
+<div style="margin-top:6px;"><button class="modal-btn cancel" onclick="clearGrammarCache()" style="width:100%;text-align:center;font-size:0.7rem;">🧹 清除文法快取 (<span id="cache-count">0</span> 筆)</button></div>
+</div>
+<div class="modal-btns"><button class="modal-btn cancel" onclick="closeSettings()">取消</button><button class="modal-btn save" onclick="saveSettings()">✅ 儲存</button></div>
 </div></div>
-
-<!-- BONUS LEARNING MODAL -->
-<div class="modal-overlay" id="bonus-modal"><div class="bonus-modal">
-  <div class="bm-title" id="bm-title"></div>
-  <div class="bm-body" id="bm-body"></div>
-  <button class="bm-close" onclick="document.getElementById('bonus-modal').classList.remove('open')">知道了！</button>
+<div class="modal-overlay" id="grammar-modal"><div class="gm">
+<div class="gm-title" id="gm-title"></div>
+<div class="gm-body" id="gm-body"></div>
+<div id="gm-warning" style="display:none;font-size:0.75rem;color:var(--accent);background:rgba(196,135,122,0.1);padding:10px;border-radius:8px;margin-bottom:10px;line-height:1.6;"></div>
+<div style="text-align:center;"><button class="gm-close" onclick="document.getElementById('grammar-modal').classList.remove('open')">知道了！</button></div>
 </div></div>
-
-<!-- KANJI STORY MODAL -->
-<div class="modal-overlay" id="story-modal"><div class="bonus-modal">
-  <div style="font-size:2.5rem;margin-bottom:6px;" id="story-emoji"></div>
-  <div class="bm-title" id="story-title"></div>
-  <div class="bm-body" id="story-body"></div>
-  <button class="bm-close" onclick="document.getElementById('story-modal').classList.remove('open')">知道了！</button>
+<div class="modal-overlay" id="bonus-modal"><div class="gm">
+<div class="gm-title" id="bm-title"></div>
+<div class="gm-body" id="bm-body"></div>
+<div style="text-align:center;"><button class="gm-close" onclick="document.getElementById('bonus-modal').classList.remove('open')">知道了！</button></div>
 </div></div>
-
-<!-- TOP BAR -->
 <div class="top-bar">
-  <div class="app-logo">✝️ 日文聖經特訓班</div>
-  <div class="countdown-badge" id="chapter-badge">約翰福音 1</div>
-  <button class="gear-btn" onclick="openSettings()">⚙️</button>
+<div class="app-logo">✝️ 日文聖經特訓班</div>
+<button class="gear-btn" onclick="openSettings()">⚙️</button>
 </div>
-
-<!-- VERSE PILLS -->
+<div class="nav-row">
+<button id="btn-ot" class="testament-btn inactive" style="border-radius:6px 0 0 6px;" onclick="switchTestament('OT')">舊約</button>
+<button id="btn-nt" class="testament-btn active" style="border-radius:0 6px 6px 0;" onclick="switchTestament('NT')">新約</button>
+<select class="nav-select" id="book-select" onchange="onBookChange()"></select>
+<select class="nav-select" id="chapter-select" onchange="onChapterChange()" style="width:50px;"></select>
 <div class="verse-scroll" id="verse-scroll"></div>
-
-<!-- METRO GRID -->
+</div>
+<div class="loading-bar" id="loading-bar"><div class="loading-fill"></div></div>
 <div class="metro-grid" id="metro-grid">
-  <!-- LISTEN bar (compact: 🐢慢速 🎤語音) -->
-  <div class="tile t-listen" onclick="playPhase1('normal')">
-    <div style="display:flex;align-items:center;gap:6px;">
-      <div style="flex:1;min-width:0;">
-        <div class="listen-sentence" id="listen-display"></div>
-        <div style="display:flex;gap:4px;align-items:center;margin-top:1px;">
-          <span id="listen-trans" style="font-size:0.55rem;color:rgba(60,64,67,0.5);flex:1;"></span>
-          <span id="listen-ref" style="font-size:0.45rem;color:rgba(60,64,67,0.3);"></span>
-        </div>
-      </div>
-      <div style="display:flex;gap:8px;flex-shrink:0;">
-        <button onclick="event.stopPropagation();playPhase1('slow')" style="width:40px;height:40px;border:2px solid rgba(60,64,67,0.2);border-radius:50%;background:rgba(255,255,255,0.2);color:var(--stroke);font-size:0.85rem;cursor:pointer;display:flex;align-items:center;justify-content:center;">🐢</button>
-        <button onclick="event.stopPropagation();startSpeech()" style="width:40px;height:40px;border:2px solid rgba(60,64,67,0.2);border-radius:50%;background:rgba(255,255,255,0.2);color:var(--stroke);font-size:0.85rem;cursor:pointer;display:flex;align-items:center;justify-content:center;">🎤</button>
-      </div>
-    </div>
-    <div id="speak-result" style="font-size:0.45rem;color:rgba(60,64,67,0.4);text-align:right;min-height:10px;margin-top:1px;"></div>
-  </div>
-
-  <!-- WRITE tile (dynamic mosaic) -->
-  <div class="tile t-write" id="write-tile">
-    <div class="tile-label">✍️ handwriting</div>
-  </div>
-
-  <!-- BONUS tile -->
-  <div class="tile t-bonus" onclick="openBonusModal()">
-    <div class="bonus-label">📚 延伸學習</div>
-    <div class="bonus-title" id="bonus-title">文法決策樹</div>
-  </div>
+<div class="tile t-listen" onclick="playPhase1('normal')">
+<div style="display:flex;align-items:center;gap:6px;">
+<div style="flex:1;min-width:0;">
+<div class="listen-sentence" id="listen-display" style="min-height:20px;"></div>
+<div style="display:flex;gap:4px;align-items:center;margin-top:1px;">
+<span id="listen-trans" style="font-size:0.55rem;color:rgba(60,64,67,0.5);flex:1;"></span>
+<span id="listen-ref" style="font-size:0.45rem;color:rgba(60,64,67,0.3);"></span>
+</div></div>
+<div style="display:flex;gap:8px;flex-shrink:0;">
+<button onclick="event.stopPropagation();playPhase1('slow')" style="width:40px;height:40px;border:2px solid rgba(60,64,67,0.2);border-radius:50%;background:rgba(255,255,255,0.2);color:#3C4043;font-size:1rem;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:transform 0.1s;">🐢</button>
+<button onclick="event.stopPropagation();startSpeech()" style="width:40px;height:40px;border:2px solid rgba(60,64,67,0.2);border-radius:50%;background:rgba(255,255,255,0.2);color:#3C4043;font-size:1rem;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:transform 0.1s;">🎤</button>
+</div></div>
+<div class="speak-result" id="speak-result"></div>
 </div>
-
-<!-- BOTTOM BAR -->
+<div class="tile t-write" id="write-tile"></div>
+<div class="tile t-bonus" onclick="openBonusModal()">
+<div style="font-size:0.55rem;color:var(--text-dim);">📚 延伸學習</div>
+<div style="font-size:0.7rem;color:var(--text);font-weight:700;margin-top:2px;" id="bonus-title">選擇經文開始</div>
+</div></div>
 <div class="bottom-bar">
-  <div class="progress-label" id="progress-label">1 / 10</div>
-  <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
-  <div class="progress-label" id="score-label">0 分</div>
+<div class="progress-label" id="progress-label">—</div>
+<div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+<div class="progress-label" id="score-label">0 分</div>
 </div>
-
 <script src="bible.js"></script>
 <script>
-// ══════════════════════════════════════════
-// GLOBAL STATE
-// ══════════════════════════════════════════
-let GEMINI_KEY='', currentChapter='john_1', currentIdx=0, totalScore=0, hasWritten=false;
-const synth=window.speechSynthesis; let jpVoice=null;
+// ═══ BOOKS DATA (66 books) ═══
+const ALL_BOOKS={OT:[
+{id:'GEN',name:'創世記',ch:50},{id:'EXO',name:'出エジプト記',ch:40},{id:'LEV',name:'レビ記',ch:27},
+{id:'NUM',name:'民数記',ch:36},{id:'DEU',name:'申命記',ch:34},{id:'JOS',name:'ヨシュア記',ch:24},
+{id:'JDG',name:'士師記',ch:21},{id:'RUT',name:'ルツ記',ch:4},{id:'1SA',name:'サムエル上',ch:31},
+{id:'2SA',name:'サムエル下',ch:24},{id:'1KI',name:'列王記上',ch:22},{id:'2KI',name:'列王記下',ch:25},
+{id:'1CH',name:'歴代誌上',ch:29},{id:'2CH',name:'歴代誌下',ch:36},{id:'EZR',name:'エズラ',ch:10},
+{id:'NEH',name:'ネヘミヤ',ch:13},{id:'EST',name:'エステル',ch:10},{id:'JOB',name:'ヨブ記',ch:42},
+{id:'PSA',name:'詩篇',ch:150},{id:'PRO',name:'箴言',ch:31},{id:'ECC',name:'伝道の書',ch:12},
+{id:'SNG',name:'雅歌',ch:8},{id:'ISA',name:'イザヤ書',ch:66},{id:'JER',name:'エレミヤ書',ch:52},
+{id:'LAM',name:'哀歌',ch:5},{id:'EZK',name:'エゼキエル',ch:48},{id:'DAN',name:'ダニエル',ch:12},
+{id:'HOS',name:'ホセア書',ch:14},{id:'JOL',name:'ヨエル書',ch:3},{id:'AMO',name:'アモス書',ch:9},
+{id:'OBA',name:'オバデヤ',ch:1},{id:'JON',name:'ヨナ書',ch:4},{id:'MIC',name:'ミカ書',ch:7},
+{id:'NAM',name:'ナホム書',ch:3},{id:'HAB',name:'ハバクク',ch:3},{id:'ZEP',name:'ゼパニヤ',ch:3},
+{id:'HAG',name:'ハガイ書',ch:2},{id:'ZEC',name:'ゼカリヤ',ch:14},{id:'MAL',name:'マラキ書',ch:4}],
+NT:[
+{id:'MAT',name:'マタイ',ch:28},{id:'MRK',name:'マルコ',ch:16},{id:'LUK',name:'ルカ',ch:24},
+{id:'JHN',name:'ヨハネ',ch:21},{id:'ACT',name:'使徒',ch:28},{id:'ROM',name:'ローマ',ch:16},
+{id:'1CO',name:'Ⅰコリント',ch:16},{id:'2CO',name:'Ⅱコリント',ch:13},{id:'GAL',name:'ガラテヤ',ch:6},
+{id:'EPH',name:'エペソ',ch:6},{id:'PHP',name:'ピリピ',ch:4},{id:'COL',name:'コロサイ',ch:4},
+{id:'1TH',name:'Ⅰテサロニケ',ch:5},{id:'2TH',name:'Ⅱテサロニケ',ch:3},{id:'1TI',name:'Ⅰテモテ',ch:6},
+{id:'2TI',name:'Ⅱテモテ',ch:4},{id:'TIT',name:'テトス',ch:3},{id:'PHM',name:'ピレモン',ch:1},
+{id:'HEB',name:'ヘブル',ch:13},{id:'JAS',name:'ヤコブ',ch:5},{id:'1PE',name:'Ⅰペテロ',ch:5},
+{id:'2PE',name:'Ⅱペテロ',ch:3},{id:'1JN',name:'Ⅰヨハネ',ch:5},{id:'2JN',name:'Ⅱヨハネ',ch:1},
+{id:'3JN',name:'Ⅲヨハネ',ch:1},{id:'JUD',name:'ユダ',ch:1},{id:'REV',name:'黙示録',ch:22}]};
+const NT_IDS=ALL_BOOKS.NT.map(b=>b.id);
+const BIBLE_API='https://bible.helloao.org/api/jpn_loc';
+const GEMINI_MODEL='gemini-2.0-flash';
 
+// ═══ STATE ═══
+let GEMINI_KEY='',curTestament='NT',curBook='JHN',curChapter=1,curVerse=1;
+let chapterVerses=[],currentUnit=null,totalScore=0,hasWritten=false;
+let _writeSegs=[],_writeSegIdx=0;
+const synth=window.speechSynthesis;let jpVoice=null;
+
+// ═══ GEMINI PROMPT ═══
+const GRAMMAR_PROMPT=`你是精通日文與繁體中文的聖經語言導師。針對台灣初學者解析經文。輸出純JSON。
+{"fullSentence":"完整日文經文","translation":"繁體中文翻譯","chunks":[{"text":"片段","tts":"假名","type":"noun|verb|particle|adj|other","highlights":[{"target":"字","cssClass":"color-noun-green|color-verb-blue|color-particle-red","note":"備註"}],"explanation":{"title":"標題含emoji","content":"HTML解說含比喻和中日差異","type":"助詞|動詞時態|語序倒裝|詞彙"}}],"roleplay":{"instruction":"指示","acceptKeywords":["關鍵字"]},"bonusLearning":{"title":"文法主題","content":"HTML決策樹","warningNote":"初學者陷阱"}}
+規則：chunks拆成自然發音區塊，每個chunk必須有explanation，用積木/雙面膠比喻`;
+
+// ═══ TTS/STT ═══
 function findVoice(){const v=synth.getVoices();jpVoice=v.find(x=>x.lang==='ja-JP'&&x.name.includes('Google'))||v.find(x=>x.lang==='ja-JP')||null;}
 synth.addEventListener('voiceschanged',findVoice);findVoice();
-function getUnits(){return BIBLE_DATA[currentChapter]?.units||[];}
-function getUnit(){return getUnits()[currentIdx]||null;}
-function hasKanji(t){return/[\u4E00-\u9FFF\u3400-\u4DBF]/.test(t);}
-
-// ══════════════════════════════════════════
-// TTS
-// ══════════════════════════════════════════
 function speakJP(t,r=0.8){synth.cancel();return new Promise(res=>{const u=new SpeechSynthesisUtterance(t);u.lang='ja-JP';u.rate=r;if(jpVoice)u.voice=jpVoice;u.onend=res;u.onerror=res;synth.speak(u);})}
-
-// ══════════════════════════════════════════
-// SETTINGS
-// ══════════════════════════════════════════
-function openSettings(){document.getElementById('settings-modal').classList.add('open');document.getElementById('gemini-key-input').value=GEMINI_KEY;}
-function closeSettings(){document.getElementById('settings-modal').classList.remove('open');}
-function saveSettings(){GEMINI_KEY=document.getElementById('gemini-key-input').value.trim();localStorage.setItem('bible-gemini-key',GEMINI_KEY);closeSettings();}
-function clearCacheReload(){if(!confirm('清除快取並重新載入？'))return;caches.keys().then(k=>Promise.all(k.map(c=>caches.delete(c)))).then(()=>navigator.serviceWorker.getRegistrations()).then(r=>Promise.all(r.map(x=>x.unregister()))).then(()=>location.reload(true)).catch(()=>location.reload(true));}
-function resetProgress(){if(!confirm('重設學習進度？'))return;localStorage.removeItem('bible-progress');currentIdx=0;totalScore=0;renderPills();loadUnit();updateProgress();}
-
-// ══════════════════════════════════════════
-// PROGRESS
-// ══════════════════════════════════════════
-function saveProgress(){try{localStorage.setItem('bible-progress',JSON.stringify({currentChapter,currentIdx,totalScore,ts:Date.now()}));}catch(e){}}
-function loadProgress(){try{const r=localStorage.getItem('bible-progress');if(!r)return;const p=JSON.parse(r);if(p.currentChapter)currentChapter=p.currentChapter;currentIdx=Math.min(p.currentIdx||0,getUnits().length-1);totalScore=p.totalScore||0;}catch(e){}}
-
-// ══════════════════════════════════════════
-// NAVIGATION
-// ══════════════════════════════════════════
-function renderPills(){const s=document.getElementById('verse-scroll');s.innerHTML='';const u=getUnits();u.forEach((x,i)=>{const p=document.createElement('button');p.className='verse-pill'+(i===currentIdx?' active':'');p.textContent=x.book+' '+x.chapter+':'+x.verse;p.onclick=()=>{currentIdx=i;renderPills();loadUnit();saveProgress();};s.appendChild(p);});}
-
-function loadUnit(){
-  const u=getUnit();if(!u)return;
-  buildListen(u);buildSpeak(u);buildHint(u);buildWrite(u);buildBonus(u);
-  updateProgress();initCanvas();
-  document.getElementById('chapter-badge').textContent=u.book+' '+u.chapter;
+function hasKanji(t){return/[\u4E00-\u9FFF\u3400-\u4DBF]/.test(t);}
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;let recognition;
+if(SR){recognition=new SR();recognition.lang='ja-JP';recognition.interimResults=false;}
+function startSpeech(){
+  const rd=document.getElementById('speak-result');if(!rd)return;
+  if(!recognition){rd.textContent='❌ 不支援';return;}
+  if(!currentUnit){rd.textContent='請先選擇經文';return;}
+  rd.textContent='🔴 聆聽中…';rd.className='speak-result';
+  try{recognition.start();}catch(e){recognition.stop();setTimeout(()=>{rd.textContent='🔴 重新聆聽…';try{recognition.start();}catch(e2){rd.textContent='❌ '+e2.message;}},500);return;}
+  recognition.onaudiostart=()=>{rd.textContent='🔴 錄音中…';};
+  recognition.onspeechstart=()=>{rd.textContent='🔴 偵測到語音…';};
+  recognition.onresult=e=>{const t=e.results[0][0].transcript;let mc=0;(currentUnit.roleplay?.acceptKeywords||[]).forEach(kw=>{if(t.includes(kw))mc++;});if(mc>0){rd.textContent='🎉 太棒了！「'+t+'」';rd.className='speak-result ok';}else{rd.textContent='你說了「'+t+'」🧐 再試！';rd.className='speak-result ng';}};
+  recognition.onerror=e=>{rd.textContent='❌ '+e.error;rd.className='speak-result ng';};
+  recognition.onend=()=>{if(rd.textContent==='🔴 聆聽中…'||rd.textContent==='🔴 重新聆聽…')rd.textContent='（沒聽到，再試 🎤）';};
 }
 
-// ══════════════════════════════════════════
-// LISTEN TILE
-// ══════════════════════════════════════════
+// ═══ SETTINGS ═══
+function openSettings(){document.getElementById('settings-modal').classList.add('open');document.getElementById('gemini-key-input').value=GEMINI_KEY;countCache();}
+function closeSettings(){document.getElementById('settings-modal').classList.remove('open');}
+function saveSettings(){GEMINI_KEY=document.getElementById('gemini-key-input').value.trim();localStorage.setItem('bible-gemini-key',GEMINI_KEY);closeSettings();}
+function clearCacheReload(){if(!confirm('清除快取並重新載入？'))return;caches.keys().then(k=>Promise.all(k.map(c=>caches.delete(c)))).then(()=>navigator.serviceWorker?.getRegistrations()).then(r=>r?Promise.all(r.map(x=>x.unregister())):0).then(()=>location.reload(true)).catch(()=>location.reload(true));}
+function resetProgress(){if(!confirm('重設學習進度？'))return;totalScore=0;saveProgress();location.reload();}
+function clearGrammarCache(){if(!confirm('清除所有文法快取？'))return;const keys=Object.keys(localStorage).filter(k=>k.startsWith('bg-'));keys.forEach(k=>localStorage.removeItem(k));countCache();showToast('已清除 '+keys.length+' 筆');}
+function countCache(){document.getElementById('cache-count').textContent=Object.keys(localStorage).filter(k=>k.startsWith('bg-')).length;}
+function saveProgress(){try{localStorage.setItem('bible-progress',JSON.stringify({curTestament,curBook,curChapter,curVerse,totalScore,ts:Date.now()}));}catch(e){}}
+function loadProgress(){try{const r=localStorage.getItem('bible-progress');if(!r)return;const p=JSON.parse(r);curTestament=p.curTestament||'NT';curBook=p.curBook||'JHN';curChapter=p.curChapter||1;curVerse=p.curVerse||1;totalScore=p.totalScore||0;}catch(e){}}
+
+// ═══ NAVIGATION ═══
+function switchTestament(t){
+  curTestament=t;
+  document.getElementById('btn-ot').className='testament-btn '+(t==='OT'?'active':'inactive');
+  document.getElementById('btn-nt').className='testament-btn '+(t==='NT'?'active':'inactive');
+  populateBooks();
+}
+function populateBooks(){
+  const sel=document.getElementById('book-select');sel.innerHTML='';
+  ALL_BOOKS[curTestament].forEach(b=>{const o=document.createElement('option');o.value=b.id;o.textContent=b.name;o.dataset.ch=b.ch;sel.appendChild(o);});
+  sel.value=curTestament==='NT'?'JHN':'GEN';curBook=sel.value;onBookChange(false);
+}
+function onBookChange(reset=true){
+  const sel=document.getElementById('book-select');curBook=sel.value;
+  const ch=parseInt(sel.selectedOptions[0]?.dataset.ch)||1;
+  const cs=document.getElementById('chapter-select');cs.innerHTML='';
+  for(let i=1;i<=ch;i++){const o=document.createElement('option');o.value=i;o.textContent=i;cs.appendChild(o);}
+  if(reset){curChapter=1;curVerse=1;}cs.value=curChapter;onChapterChange(reset);
+}
+async function onChapterChange(reset=true){
+  curChapter=parseInt(document.getElementById('chapter-select').value)||1;
+  if(reset)curVerse=1;setLoading(true);
+  // NT: fetch verse list from API
+  if(NT_IDS.includes(curBook)){
+    try{
+      const d=await(await fetch(BIBLE_API+'/'+curBook+'/'+curChapter+'.json')).json();
+      chapterVerses=d.chapter.content.filter(v=>v.type==='verse').map(v=>({num:v.number,text:Array.isArray(v.content)?v.content.join(''):v.content}));
+    }catch(e){chapterVerses=[];for(let i=1;i<=30;i++)chapterVerses.push({num:i,text:''});}
+  }else{
+    // OT: generate verse list (30 default, actual count unknown)
+    chapterVerses=[];for(let i=1;i<=40;i++)chapterVerses.push({num:i,text:''});
+  }
+  renderVersePills();await loadVerse(curVerse);setLoading(false);
+}
+function renderVersePills(){
+  const s=document.getElementById('verse-scroll');s.innerHTML='';
+  chapterVerses.forEach(v=>{
+    const p=document.createElement('button');p.className='verse-pill'+(v.num===curVerse?' active':'');
+    if(localStorage.getItem('bg-'+curBook+'-'+curChapter+'-'+v.num))p.classList.add('cached');
+    p.textContent=v.num;p.onclick=()=>{curVerse=v.num;renderVersePills();loadVerse(v.num);saveProgress();};
+    s.appendChild(p);
+  });
+}
+
+// ═══ LOAD VERSE: cache → Gemini → fallback ═══
+async function analyzeWithGemini(prompt){
+  if(!GEMINI_KEY)throw new Error('NO_KEY');
+  const res=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+GEMINI_MODEL+':generateContent?key='+GEMINI_KEY,{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({contents:[{parts:[{text:GRAMMAR_PROMPT+'\n\n【經文】\n'+prompt}]}],generationConfig:{responseMimeType:'application/json'}})
+  });
+  const data=await res.json();const raw=data.candidates?.[0]?.content?.parts?.[0]?.text||'';
+  return JSON.parse(raw.replace(/```json|```/g,'').trim());
+}
+
+async function loadVerse(num){
+  setLoading(true);curVerse=num;
+  const ck='bg-'+curBook+'-'+curChapter+'-'+num;
+  let unit=null;
+  // 1. Cache
+  try{const c=localStorage.getItem(ck);if(c)unit=JSON.parse(c);}catch(e){}
+  // 2. Gemini
+  if(!unit&&GEMINI_KEY){
+    const verse=chapterVerses.find(v=>v.num===num);
+    const rawText=verse?.text||'';
+    const bookName=document.getElementById('book-select').selectedOptions[0]?.textContent||curBook;
+    const prompt=rawText?'以下是日文聖經經文，請分析：\n'+rawText:'請查詢日文聖經（口語訳）'+bookName+' 第'+curChapter+'章 第'+num+'節，並進行文法分析。';
+    try{
+      document.getElementById('listen-display').innerHTML='<span style="font-size:0.7rem;color:rgba(60,64,67,0.5);">🧠 AI 分析中…</span>';
+      unit=await analyzeWithGemini(prompt);
+      if(!unit.fullSentence&&rawText)unit.fullSentence=rawText;
+      unit.fullTts=unit.chunks.map(c=>c.tts||c.text).join('');
+      unit.book=curBook;unit.chapter=curChapter;unit.verse=num;
+      localStorage.setItem(ck,JSON.stringify(unit));renderVersePills();
+    }catch(e){if(e.message==='NO_KEY')showToast('請先設定 Gemini API Key ⚙️');else showToast('AI 分析失敗');}
+  }
+  // 3. Fallback: bible.js pre-compiled
+  if(!unit&&typeof BIBLE_DATA!=='undefined'){
+    const pre=BIBLE_DATA?.john_1?.units?.find(u=>u.verse==num||u.verse===num+'');
+    if(pre)unit=pre;
+  }
+  // 4. Raw text fallback
+  if(!unit){
+    const verse=chapterVerses.find(v=>v.num===num);const t=verse?.text||'（請設定 Gemini API Key）';
+    unit={fullSentence:t,translation:'（需要 API Key）',fullTts:t,chunks:[{text:t,tts:t,type:'other',highlights:[],explanation:null}],roleplay:{acceptKeywords:[]},bonusLearning:{title:'設定 API Key',content:'<p>⚙️ 設定 Gemini API Key 即可自動分析全本聖經</p>'}};
+  }
+  currentUnit=unit;buildListen(unit);buildWrite(unit);buildBonus(unit);
+  setTimeout(()=>initCanvas(),300);updateProgress();setLoading(false);
+}
+
+// ═══ LISTEN ═══
 function buildListen(u){
   const c=document.getElementById('listen-display');c.innerHTML='';
   u.chunks.forEach((chunk,ci)=>{
     const w=document.createElement('span');w.className='chunk-wrap';w.id='lc'+ci;
+    if(chunk.explanation)w.classList.add('has-grammar');
+    w.onclick=(e)=>{e.stopPropagation();if(chunk.explanation)showGrammarModal(chunk.explanation);};
     const needsRuby=hasKanji(chunk.text)||(chunk.tts&&chunk.tts!==chunk.text);
-    if(needsRuby){
-      const rb=document.createElement('span');rb.className='chunk-ruby';
-      const f=document.createElement('span');f.className='furigana';f.textContent=chunk.tts||'';rb.appendChild(f);
-      const cl=document.createElement('span');[...chunk.text].forEach(ch=>{const s=document.createElement('span');s.className='chunk-char';s.textContent=ch;const h=chunk.highlights.find(x=>x.target.includes(ch));if(h)s.dataset.css=h.cssClass;cl.appendChild(s);});
-      rb.appendChild(cl);w.appendChild(rb);
-    }else{
-      [...chunk.text].forEach(ch=>{const s=document.createElement('span');s.className='chunk-char';s.textContent=ch;const h=chunk.highlights.find(x=>x.target.includes(ch));if(h)s.dataset.css=h.cssClass;w.appendChild(s);});
-    }
+    if(needsRuby){const rb=document.createElement('span');rb.className='chunk-ruby';const f=document.createElement('span');f.className='furigana';f.textContent=chunk.tts||'';rb.appendChild(f);const cl=document.createElement('span');[...chunk.text].forEach(ch=>{const s=document.createElement('span');s.className='chunk-char';s.textContent=ch;const h=(chunk.highlights||[]).find(x=>x.target.includes(ch));if(h)s.classList.add(h.cssClass);cl.appendChild(s);});rb.appendChild(cl);w.appendChild(rb);}
+    else{[...chunk.text].forEach(ch=>{const s=document.createElement('span');s.className='chunk-char';s.textContent=ch;const h=(chunk.highlights||[]).find(x=>x.target.includes(ch));if(h)s.classList.add(h.cssClass);w.appendChild(s);});}
     c.appendChild(w);
   });
-  document.getElementById('listen-trans').textContent='🇹🇼 '+u.translation;
-  document.getElementById('listen-ref').textContent=u.book+' '+u.chapter+':'+u.verse;
+  document.getElementById('listen-trans').textContent='🇹🇼 '+(u.translation||'');
+  document.getElementById('listen-ref').textContent=curBook+' '+curChapter+':'+curVerse;
 }
-
 async function playPhase1(speed){
-  const u=getUnit();if(!u)return;const r=speed==='slow'?0.5:0.85;
-  document.querySelectorAll('#listen-display .chunk-char').forEach(e=>{e.className='chunk-char';e.style.color='';});
-  for(let ci=0;ci<u.chunks.length;ci++){
-    const ch=u.chunks[ci],w=document.getElementById('lc'+ci);w.classList.add('active-chunk');
-    w.querySelectorAll('.chunk-char').forEach(e=>{const css=e.dataset.css;if(css)e.classList.add(css);});
-    await speakJP(ch.tts||ch.text,r);w.classList.remove('active-chunk');
-  }
+  if(!currentUnit)return;const u=currentUnit;const r=speed==='slow'?0.5:0.85;
+  for(let ci=0;ci<u.chunks.length;ci++){const ch=u.chunks[ci],w=document.getElementById('lc'+ci);if(w){w.style.background='rgba(255,255,255,0.15)';w.querySelectorAll('.chunk-char').forEach(e=>{const h=(ch.highlights||[]).find(x=>x.target.includes(e.textContent));if(h)e.classList.add(h.cssClass);});}await speakJP(ch.tts||ch.text,r);if(w)w.style.background='';}
   await new Promise(r=>setTimeout(r,200));await speakJP(u.fullTts||u.fullSentence,r+0.1);
 }
-
-// ══════════════════════════════════════════
-// SPEAK TILE
-// ══════════════════════════════════════════
-const SR=window.SpeechRecognition||window.webkitSpeechRecognition;let recognition;
-if(SR){recognition=new SR();recognition.lang='ja-JP';recognition.interimResults=false;}
-
-function startSpeech(){
-  if(!recognition){document.getElementById('speak-result').textContent='瀏覽器不支援';return;}
-  const u=getUnit();if(!u)return;
-  const rd=document.getElementById('speak-result');
-  rd.textContent='🔴 聆聽中…';rd.className='speak-result';
-  try{recognition.start();}catch(e){recognition.stop();setTimeout(()=>{rd.textContent='🔴 聆聽中…';recognition.start();},300);return;}
-  recognition.onresult=e=>{const t=e.results[0][0].transcript;
-    let mc=0;u.roleplay.acceptKeywords.forEach(kw=>{if(t.includes(kw))mc++;});
-    if(mc>0){rd.textContent='🎉 太棒了！「'+t+'」';rd.className='speak-result ok';}
-    else{rd.textContent='你說了「'+t+'」🧐 再試！';rd.className='speak-result ng';}
-  };
-  recognition.onerror=()=>{rd.textContent='聽不清楚，再試！';rd.className='speak-result ng';};
-  recognition.onend=()=>{if(rd.textContent==='🔴 聆聽中…')rd.textContent='點擊 🎤 開口唸';};
+function showGrammarModal(info){
+  document.getElementById('gm-title').textContent=info.title||'文法解說';
+  document.getElementById('gm-body').innerHTML=info.content||'';
+  const w=document.getElementById('gm-warning');if(info.warningNote){w.textContent='⚠️ '+info.warningNote;w.style.display='block';}else{w.style.display='none';}
+  document.getElementById('grammar-modal').classList.add('open');
 }
 
-// ══════════════════════════════════════════
-// HINT TILE
-// ══════════════════════════════════════════
-function buildHint(u){ /* removed — TC users know kanji */ }
-function buildSpeak(u){ document.getElementById('speak-result').textContent=''; }
-
-// ══════════════════════════════════════════
-// WRITE TILE — WP Tile Mosaic (full sentence)
-// ══════════════════════════════════════════
+// ═══ WRITE: split + segment ═══
 const TB={noun:'#8FA88B',verb:'#7B9DAB',particle:'#C4877A',adj:'#C9B88C',other:'#A8A49B'};
 function isKanjiChar(ch){const c=ch.codePointAt(0);return(c>=0x4E00&&c<=0x9FFF)||(c>=0x3400&&c<=0x4DBF);}
 function getCharTypeMap(u){const map=[],chars=[...u.fullSentence];let pos=0;for(const ck of u.chunks){for(const cc of[...ck.text]){if(pos<chars.length&&chars[pos]===cc){map[pos]=ck.type;pos++;}}}for(let i=0;i<chars.length;i++)if(!map[i])map[i]='other';return map;}
 function simPack(chars,cols){const MR=40,o=Array.from({length:MR},()=>new Array(cols).fill(false));let maxR=0;for(const ch of chars){const cs=isKanjiChar(ch)?2:1,rs=cs;let placed=false;for(let r=0;r<MR-rs&&!placed;r++)for(let c=0;c<=cols-cs&&!placed;c++){let ok=true;for(let dr=0;dr<rs&&ok;dr++)for(let dc=0;dc<cs&&ok;dc++)if(o[r+dr][c+dc])ok=false;if(ok){for(let dr=0;dr<rs;dr++)for(let dc=0;dc<cs;dc++)o[r+dr][c+dc]=true;maxR=Math.max(maxR,r+rs);placed=true;}}}return maxR;}
 
-function buildWrite(u){
-  if(!u)return;const sentence=u.fullSentence,chars=[...sentence],typeMap=getCharTypeMap(u);
-  const writeTile=document.querySelector('.t-write');if(!writeTile)return;
-  writeTile.innerHTML='';writeTile.style.cssText+='display:flex;flex-direction:column;padding:6px 10px;';
-  const hd=document.createElement('div');hd.style.cssText='display:flex;align-items:center;justify-content:space-between;flex-shrink:0;margin-bottom:3px;gap:4px;position:relative;z-index:10;';hd.innerHTML='<div style="display:flex;gap:4px;align-items:center;"><button onclick="clearAllTiles()" style="padding:4px 10px;border:none;border-radius:8px;font-size:0.65rem;font-weight:700;cursor:pointer;background:rgba(60,64,67,0.2);color:#3C4043;">❌ 重寫</button><button onclick="submitAllTiles()" style="padding:4px 10px;border:none;border-radius:8px;font-size:0.65rem;font-weight:700;cursor:pointer;background:#C4877A;color:#F0EBE1;">🔍 交卷</button></div><span style="font-size:0.65rem;font-weight:700;color:#F0EBE1;">🇹🇼 '+u.translation+'</span>';writeTile.appendChild(hd);
-  const vw=writeTile.getBoundingClientRect().width-20,vh=writeTile.getBoundingClientRect().height-30,gap=3;
-  let bestCols=6,bestCell=30;
-  for(let cols=3;cols<=7;cols++){const cW=Math.floor((vw-gap*(cols+1))/cols),rows=simPack(chars,cols);if(!rows)continue;const cH=Math.floor((vh-gap*(rows+1))/rows),c=Math.min(cW,cH,200);if(c>bestCell){bestCell=c;bestCols=cols;}}
+function smartSplit(t,mx){mx=mx||20;let s=t.split(/(?<=[。，、])/).filter(x=>x.trim().length>0);const r=[];for(const seg of s){if([...seg].length<=mx)r.push(seg);else{const ch=[...seg];for(let i=0;i<ch.length;i+=mx)r.push(ch.slice(i,i+mx).join(''));}}return r.length>0?r:[t];}
+
+function buildWrite(u){if(!u)return;_writeSegs=smartSplit(u.fullSentence,20);_writeSegIdx=0;buildWriteSegment(u,0);}
+
+function buildWriteSegment(u,segIdx){
+  if(!u||segIdx<0||segIdx>=_writeSegs.length)return;_writeSegIdx=segIdx;
+  const segText=_writeSegs[segIdx],chars=[...segText];
+  let segStart=0;for(let i=0;i<segIdx;i++)segStart+=[..._writeSegs[i]].length;
+  const fullTypeMap=getCharTypeMap(u),typeMap=fullTypeMap.slice(segStart,segStart+chars.length);
+  const wt=document.querySelector('.t-write');if(!wt)return;
+  wt.innerHTML='';wt.style.cssText+='display:flex;flex-direction:column;padding:6px 10px;';
+  let segNav='';if(_writeSegs.length>1){segNav='<div style="display:flex;gap:2px;align-items:center;">';_writeSegs.forEach((s,i)=>{segNav+='<span onclick="buildWriteSegment(currentUnit,'+i+')" style="display:inline-block;width:18px;height:18px;line-height:18px;text-align:center;border-radius:50%;font-size:0.5rem;font-weight:700;cursor:pointer;'+(i===segIdx?'background:#C4877A;color:#F0EBE1;':i<segIdx?'background:#8FA88B;color:#F0EBE1;':'background:rgba(60,64,67,0.15);color:#6B6860;')+'">'+(i+1)+'</span>';});segNav+='</div>';}
+  const hd=document.createElement('div');hd.style.cssText='display:flex;align-items:center;justify-content:space-between;flex-shrink:0;margin-bottom:3px;gap:4px;position:relative;z-index:10;';
+  hd.innerHTML='<div style="display:flex;gap:3px;align-items:center;"><button onclick="clearAllTiles()" style="padding:3px 7px;border:none;border-radius:6px;font-size:0.55rem;font-weight:700;cursor:pointer;background:rgba(60,64,67,0.2);color:#3C4043;">❌</button><button onclick="submitSegment()" style="padding:3px 7px;border:none;border-radius:6px;font-size:0.55rem;font-weight:700;cursor:pointer;background:#C4877A;color:#F0EBE1;">🔍</button>'+segNav+'</div><span style="font-size:0.55rem;font-weight:700;color:#F0EBE1;max-width:45%;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">🇹🇼 '+(u.translation||'')+'</span>';
+  wt.appendChild(hd);
+  const vw=wt.getBoundingClientRect().width-20,vh=wt.getBoundingClientRect().height-30,gap=3;
+  let bestCols=6,bestCell=30;for(let cols=3;cols<=7;cols++){const cW=Math.floor((vw-gap*(cols+1))/cols),rows=simPack(chars,cols);if(!rows)continue;const cH=Math.floor((vh-gap*(rows+1))/rows),c=Math.min(cW,cH,200);if(c>bestCell){bestCell=c;bestCols=cols;}}
   const numCols=bestCols,cell=bestCell,MR=40,occ=Array.from({length:MR},()=>new Array(numCols).fill(false));
   function findSlot(cs,rs){for(let r=0;r<MR-rs;r++)for(let c=0;c<=numCols-cs;c++){let ok=true;for(let dr=0;dr<rs&&ok;dr++)for(let dc=0;dc<cs&&ok;dc++)if(occ[r+dr][c+dc])ok=false;if(ok)return{r,c};}return{r:0,c:0};}
   function place(r,c,cs,rs){for(let dr=0;dr<rs;dr++)for(let dc=0;dc<cs;dc++)occ[r+dr][c+dc]=true;}
   const tiles=[];chars.forEach((ch,i)=>{const isK=isKanjiChar(ch),isPu=/[、。！？「」（）]/.test(ch),cs=isK?2:1,rs=cs,s=findSlot(cs,rs);place(s.r,s.c,cs,rs);tiles.push({idx:i,col:s.c+1,row:s.r+1,cs,rs,type:isPu?'other':(typeMap[i]||'other'),isK});});
-  const gridWrap=document.createElement('div');gridWrap.style.cssText='flex:1;display:flex;align-items:center;justify-content:center;min-height:0;';
+  const gw=document.createElement('div');gw.style.cssText='flex:1;display:flex;align-items:center;justify-content:center;min-height:0;overflow:hidden;';
   const g=document.createElement('div');g.style.cssText='display:grid;gap:'+gap+'px;grid-template-columns:repeat('+numCols+','+cell+'px);grid-auto-rows:'+cell+'px;justify-content:center;';
   window._p3Chars=chars;window._p3TileSizes=[];
-  tiles.forEach(t=>{const bg=TB[t.type]||TB.other,tile=document.createElement('div');tile.id='p3-box-'+t.idx;tile.style.cssText='grid-column:'+t.col+'/span '+t.cs+';grid-row:'+t.row+'/span '+t.rs+';background:'+bg+';border-radius:4px;position:relative;overflow:hidden;cursor:crosshair;box-shadow:0 1px 4px rgba(0,0,0,0.3);';const sz=cell*(t.isK?2:1)+(t.isK?gap:0);window._p3TileSizes[t.idx]=sz;const dc=document.createElement('canvas');dc.id='p3-draw-'+t.idx;dc.style.cssText='position:absolute;inset:0;width:100%;height:100%;z-index:2;touch-action:none;';tile.appendChild(dc);const lb=document.createElement('div');lb.style.cssText='position:absolute;bottom:0;left:0;z-index:5;font-size:0.8rem;color:#1a1a2e;font-weight:700;cursor:pointer;padding:4px 8px;background:rgba(255,255,255,0.15);border-radius:0 6px 0 4px;';lb.textContent=(t.idx+1);lb.title='點擊清除此格';(function(idx){lb.addEventListener('click',function(e){e.stopPropagation();e.preventDefault();const cv=document.getElementById('p3-draw-'+idx);if(cv)cv.getContext('2d').clearRect(0,0,cv.width,cv.height);const bx=document.getElementById('p3-box-'+idx);if(bx)bx.style.boxShadow='0 1px 4px rgba(0,0,0,0.3)';});lb.addEventListener('touchend',function(e){e.stopPropagation();e.preventDefault();const cv=document.getElementById('p3-draw-'+idx);if(cv)cv.getContext('2d').clearRect(0,0,cv.width,cv.height);const bx=document.getElementById('p3-box-'+idx);if(bx)bx.style.boxShadow='0 1px 4px rgba(0,0,0,0.3)';});})(t.idx);tile.appendChild(lb);if(t.isK){const tg=document.createElement('span');tg.style.cssText='position:absolute;top:2px;right:3px;z-index:3;font-size:0.45rem;color:rgba(62,50,43,0.45);pointer-events:none;font-weight:700;';tg.textContent='漢';tile.appendChild(tg);}g.appendChild(tile);});
-  gridWrap.appendChild(g);writeTile.appendChild(gridWrap);
+  tiles.forEach(t=>{const bg=TB[t.type]||TB.other,tile=document.createElement('div');tile.id='p3-box-'+t.idx;tile.style.cssText='grid-column:'+t.col+'/span '+t.cs+';grid-row:'+t.row+'/span '+t.rs+';background:'+bg+';border-radius:4px;position:relative;overflow:hidden;cursor:crosshair;box-shadow:0 1px 4px rgba(0,0,0,0.3);';const sz=cell*(t.isK?2:1)+(t.isK?gap:0);window._p3TileSizes[t.idx]=sz;const dc=document.createElement('canvas');dc.id='p3-draw-'+t.idx;dc.style.cssText='position:absolute;inset:0;width:100%;height:100%;z-index:2;touch-action:none;';tile.appendChild(dc);
+  const lb=document.createElement('div');lb.style.cssText='position:absolute;bottom:0;left:0;z-index:5;font-size:0.8rem;color:#1a1a2e;font-weight:700;cursor:pointer;padding:4px 8px;background:rgba(255,255,255,0.15);border-radius:0 6px 0 4px;';lb.textContent=(t.idx+1);(function(idx){lb.addEventListener('click',function(e){e.stopPropagation();e.preventDefault();const cv=document.getElementById('p3-draw-'+idx);if(cv)cv.getContext('2d').clearRect(0,0,cv.width,cv.height);});lb.addEventListener('touchend',function(e){e.stopPropagation();e.preventDefault();const cv=document.getElementById('p3-draw-'+idx);if(cv)cv.getContext('2d').clearRect(0,0,cv.width,cv.height);});})(t.idx);tile.appendChild(lb);
+  if(t.isK){const tg=document.createElement('span');tg.style.cssText='position:absolute;top:2px;right:3px;z-index:3;font-size:0.45rem;color:rgba(62,50,43,0.45);pointer-events:none;font-weight:700;';tg.textContent='漢';tile.appendChild(tg);}g.appendChild(tile);});
+  gw.appendChild(g);wt.appendChild(gw);setTimeout(()=>initCanvas(),200);hasWritten=false;
 }
 
-function initCanvas(){
-  const chars=window._p3Chars;if(!chars)return;const sizes=window._p3TileSizes||[];
-  chars.forEach((ch,i)=>{const dc=document.getElementById('p3-draw-'+i);if(!dc)return;const sz=sizes[i]||60;const clone=dc.cloneNode(true);dc.parentNode.replaceChild(clone,dc);const fc=document.getElementById('p3-draw-'+i);fc.width=sz;fc.height=sz;const ctx=fc.getContext('2d');ctx.lineCap='round';ctx.lineJoin='round';ctx.lineWidth=Math.max(2,sz*0.025);ctx.strokeStyle='#3C4043';let d=false;function gp(e){const r=fc.getBoundingClientRect(),cx=e.touches?e.touches[0].clientX:e.clientX,cy=e.touches?e.touches[0].clientY:e.clientY;return{x:(cx-r.left)*(fc.width/r.width),y:(cy-r.top)*(fc.height/r.height)};}fc.addEventListener('mousedown',e=>{e.preventDefault();d=true;hasWritten=true;const p=gp(e);ctx.beginPath();ctx.moveTo(p.x,p.y);});fc.addEventListener('mousemove',e=>{if(!d)return;e.preventDefault();const p=gp(e);ctx.lineTo(p.x,p.y);ctx.stroke();});fc.addEventListener('mouseup',()=>d=false);fc.addEventListener('touchstart',e=>{e.preventDefault();d=true;hasWritten=true;const p=gp(e);ctx.beginPath();ctx.moveTo(p.x,p.y);},{passive:false});fc.addEventListener('touchmove',e=>{if(!d)return;e.preventDefault();const p=gp(e);ctx.lineTo(p.x,p.y);ctx.stroke();},{passive:false});fc.addEventListener('touchend',()=>d=false);});
-  hasWritten=false;
-}
+function initCanvas(){const chars=window._p3Chars;if(!chars)return;const sizes=window._p3TileSizes||[];chars.forEach((ch,i)=>{const dc=document.getElementById('p3-draw-'+i);if(!dc)return;const sz=sizes[i]||60;const clone=dc.cloneNode(true);dc.parentNode.replaceChild(clone,dc);const fc=document.getElementById('p3-draw-'+i);fc.width=sz;fc.height=sz;const ctx=fc.getContext('2d');ctx.lineCap='round';ctx.lineJoin='round';ctx.lineWidth=Math.max(2,sz*0.025);ctx.strokeStyle='#3C4043';let d=false;function gp(e){const r=fc.getBoundingClientRect(),cx=e.touches?e.touches[0].clientX:e.clientX,cy=e.touches?e.touches[0].clientY:e.clientY;return{x:(cx-r.left)*(fc.width/r.width),y:(cy-r.top)*(fc.height/r.height)};}fc.addEventListener('mousedown',e=>{e.preventDefault();d=true;hasWritten=true;const p=gp(e);ctx.beginPath();ctx.moveTo(p.x,p.y);});fc.addEventListener('mousemove',e=>{if(!d)return;e.preventDefault();const p=gp(e);ctx.lineTo(p.x,p.y);ctx.stroke();});fc.addEventListener('mouseup',()=>d=false);fc.addEventListener('touchstart',e=>{e.preventDefault();d=true;hasWritten=true;const p=gp(e);ctx.beginPath();ctx.moveTo(p.x,p.y);},{passive:false});fc.addEventListener('touchmove',e=>{if(!d)return;e.preventDefault();const p=gp(e);ctx.lineTo(p.x,p.y);ctx.stroke();},{passive:false});fc.addEventListener('touchend',()=>d=false);});hasWritten=false;}
 
 function clearAllTiles(){const chars=window._p3Chars;if(!chars)return;chars.forEach((c,i)=>{const cv=document.getElementById('p3-draw-'+i);if(cv)cv.getContext('2d').clearRect(0,0,cv.width,cv.height);const bx=document.getElementById('p3-box-'+i);if(bx)bx.style.boxShadow='0 1px 4px rgba(0,0,0,0.3)';});hasWritten=false;}
 
-async function submitAllTiles(){
+async function submitSegment(){
   if(!hasWritten){showToast('請先寫字！✍️');return;}
-  const chars=window._p3Chars,u=getUnit();if(!chars||!u)return;let ok=0;
+  const chars=window._p3Chars;if(!chars)return;let ok=0;
   for(let i=0;i<chars.length;i++){const bx=document.getElementById('p3-box-'+i),cv=document.getElementById('p3-draw-'+i);if(!cv||!bx)continue;
-    if(GEMINI_KEY){try{const img=cv.toDataURL('image/png').split(',')[1];const res=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key='+GEMINI_KEY,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts:[{inlineData:{mimeType:'image/png',data:img}},{text:'你是手寫日文辨識器。目標字：'+chars[i]+'\n只回傳JSON：{"char":"你看到的字"}'}]}]})});const data=await res.json();const txt=data.candidates?.[0]?.content?.parts?.[0]?.text||'';const p=JSON.parse(txt.replace(/```json|```/g,'').trim());const seen=p.char||'？';if(seen===chars[i]){bx.style.boxShadow='0 0 0 3px #00e676,0 2px 8px rgba(0,230,118,0.4)';ok++;}else{bx.style.boxShadow='0 0 0 3px #C4877A';showOcrToast(seen,chars[i]);}}catch(e){ok+=0.5;}}
+    if(GEMINI_KEY){try{const img=cv.toDataURL('image/png').split(',')[1];const res=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+GEMINI_MODEL+':generateContent?key='+GEMINI_KEY,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts:[{inlineData:{mimeType:'image/png',data:img}},{text:'手寫日文辨識。目標：'+chars[i]+'\n回傳JSON：{"char":"字"}'}]}]})});const data=await res.json();const txt=data.candidates?.[0]?.content?.parts?.[0]?.text||'';const p=JSON.parse(txt.replace(/```json|```/g,'').trim());if(p.char===chars[i]){bx.style.boxShadow='0 0 0 3px #00e676';ok++;}else{bx.style.boxShadow='0 0 0 3px #C4877A';}}catch(e){ok+=0.5;}}
     else{bx.style.boxShadow='0 0 0 3px #00e676';ok++;}}
   const pct=ok/chars.length,score=Math.round(pct*12);totalScore+=score;
   showScorePopup(score,pct>=0.9?'完美！':pct>=0.6?'不錯！':'繼續加油');updateProgress();saveProgress();
-  setTimeout(()=>{document.querySelector('.score-popup')?.remove();const units=getUnits();if(currentIdx<units.length-1){currentIdx++;renderPills();loadUnit();saveProgress();}else{showToast('🎉 本章完成！');}},2500);
+  setTimeout(()=>{document.querySelector('.score-popup')?.remove();
+    if(_writeSegIdx+1<_writeSegs.length){showToast('✍️ 第'+(_writeSegIdx+2)+'/'+_writeSegs.length+' 段');buildWriteSegment(currentUnit,_writeSegIdx+1);}
+    else{showToast('🎉 整句完成！');setTimeout(()=>{if(curVerse<chapterVerses.length){curVerse++;renderVersePills();loadVerse(curVerse);saveProgress();}},1500);}
+  },2000);
 }
 
-// ══════════════════════════════════════════
-// BONUS TILE
-// ══════════════════════════════════════════
-function buildBonus(u){
-  if(!u?.bonusLearning)return;
-  document.getElementById('bonus-title').textContent='📖 '+u.bonusLearning.title;
-}
-function openBonusModal(){
-  const u=getUnit();if(!u?.bonusLearning)return;
-  document.getElementById('bm-title').textContent=u.bonusLearning.title;
-  document.getElementById('bm-body').innerHTML=u.bonusLearning.content;
-  document.getElementById('bonus-modal').classList.add('open');
-}
+// ═══ BONUS ═══
+function buildBonus(u){if(u?.bonusLearning)document.getElementById('bonus-title').textContent='📖 '+(u.bonusLearning.title||'延伸學習');}
+function openBonusModal(){if(!currentUnit?.bonusLearning)return;const b=currentUnit.bonusLearning;document.getElementById('bm-title').textContent=b.title||'延伸學習';document.getElementById('bm-body').innerHTML=(b.content||'')+(b.warningNote?'<p style="margin-top:10px;color:var(--accent);">⚠️ '+b.warningNote+'</p>':'');document.getElementById('bonus-modal').classList.add('open');}
 
-function buildSpeak(u){document.getElementById('speak-result').textContent='點擊開口唸';document.getElementById('speak-result').className='speak-result';}
-
-// ══════════════════════════════════════════
-// UI HELPERS
-// ══════════════════════════════════════════
-function updateProgress(){const u=getUnits(),t=u.length;document.getElementById('progress-label').textContent=(currentIdx+1)+' / '+t;document.getElementById('progress-fill').style.width=(t>0?((currentIdx+1)/t*100):0)+'%';document.getElementById('score-label').textContent=totalScore+' 分';}
+// ═══ UI ═══
+function setLoading(on){document.getElementById('loading-bar').classList.toggle('active',on);}
+function updateProgress(){const t=chapterVerses.length;document.getElementById('progress-label').textContent=curVerse+'/'+t;document.getElementById('progress-fill').style.width=(t>0?(curVerse/t*100):0)+'%';document.getElementById('score-label').textContent=totalScore+'分';}
 function showScorePopup(p,d){document.querySelector('.score-popup')?.remove();const div=document.createElement('div');div.className='score-popup show';div.innerHTML='<div class="score-val">+'+p+'</div><div class="score-desc">'+d+'</div>';document.body.appendChild(div);}
-function showOcrToast(s,x){const ok=s===x;const t=document.createElement('div');t.className='ocr-toast';t.innerHTML='<span class="ocr-seen">'+s+'</span><span style="color:var(--text-muted)">→</span><span>'+x+'</span><span class="'+(ok?'ocr-ok':'ocr-ng')+'">'+(ok?'✅':'❌')+'</span>';document.body.appendChild(t);setTimeout(()=>t.remove(),2500);}
-function showToast(m){const d=document.createElement('div');d.className='ocr-toast';d.textContent=m;document.body.appendChild(d);setTimeout(()=>d.remove(),2000);}
+function showToast(m){const d=document.createElement('div');d.className='ocr-toast';d.textContent=m;document.body.appendChild(d);setTimeout(()=>d.remove(),2500);}
 
-// ══════════════════════════════════════════
-// INIT
-// ══════════════════════════════════════════
+// ═══ INIT ═══
 window.addEventListener('load',()=>{
   try{GEMINI_KEY=localStorage.getItem('bible-gemini-key')||'';}catch(e){}
-  loadProgress();renderPills();loadUnit();
+  loadProgress();switchTestament(curTestament);
+  const sel=document.getElementById('book-select');
+  const bookExists=[...sel.options].some(o=>o.value===curBook);
+  if(bookExists)sel.value=curBook;
+  onBookChange(false);
   window.addEventListener('resize',()=>initCanvas());
 });
+if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(()=>{});}
 </script>
 </body>
 </html>
