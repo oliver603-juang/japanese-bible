@@ -4,7 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="聖經特訓">
   <meta name="theme-color" content="#1E1E24">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon-180.png">
+  <link rel="icon" type="image/png" sizes="64x64" href="icon-64.png">
   <title>日文聖經特訓班</title>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&family=Noto+Sans+JP:wght@400;700;900&family=M+PLUS+Rounded+1c:wght@400;700;900&display=swap" rel="stylesheet">
   <style>
@@ -34,17 +39,15 @@
     .verse-pill.done{background:var(--tile-noun);color:var(--bg);border-color:var(--tile-noun);}
 
     /* ═══ METRO GRID ═══ */
-    .metro-grid{flex:1;display:grid;grid-template-columns:repeat(2,1fr);grid-template-rows:auto auto 1fr auto;gap:var(--gap);padding:var(--gap) 8px;overflow:hidden;min-height:0;}
+    .metro-grid{flex:1;display:grid;grid-template-columns:1fr;grid-template-rows:auto 1fr auto;gap:var(--gap);padding:var(--gap) 8px;overflow:hidden;min-height:0;}
     .tile{border-radius:var(--radius);padding:10px;position:relative;overflow:hidden;cursor:pointer;display:flex;flex-direction:column;transition:transform 0.1s;}
     .tile:active{transform:scale(0.97);}
     .tile-label{font-size:0.5rem;font-weight:700;color:rgba(60,64,67,0.5);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;}
 
     /* Tile colors */
-    .t-listen{grid-column:span 2;background:var(--tile-verb);}
-    .t-write{grid-column:span 2;grid-row:span 1;background:var(--tile-noun);min-height:0;flex:1;}
-    .t-speak{background:var(--tile-particle);}
-    .t-hint{background:var(--tile-adj);}
-    .t-bonus{grid-column:span 2;background:var(--surface);border:1px solid var(--border);cursor:pointer;}
+    .t-listen{background:var(--tile-verb);padding:6px 10px;}
+    .t-write{background:var(--tile-noun);min-height:0;flex:1;}
+    .t-bonus{background:var(--surface);border:1px solid var(--border);cursor:pointer;}
 
     /* ═══ LISTEN TILE ═══ */
     .listen-sentence{font-family:'M PLUS Rounded 1c','Noto Sans JP',sans-serif;font-size:clamp(1rem,4vw,1.6rem);font-weight:900;line-height:1.5;display:flex;flex-wrap:wrap;gap:1px;align-items:baseline;}
@@ -181,43 +184,28 @@
     <div class="listen-trans" id="listen-trans"></div>
     <div class="listen-ref" id="listen-ref"></div>
     <div class="listen-btns">
-      <button class="listen-btn" onclick="event.stopPropagation();playPhase1('slow')">🐢 慢速</button>
-      <button class="listen-btn" onclick="event.stopPropagation();playPhase1('normal')">⚡ 常速</button>
+  <!-- LISTEN bar (compact: sentence + 🐢🔊🎤 buttons) -->
+  <div class="tile t-listen" onclick="playPhase1()">
+    <div style="display:flex;align-items:center;gap:6px;">
+      <div style="flex:1;min-width:0;">
+        <div class="listen-sentence" id="listen-display"></div>
+        <div style="display:flex;gap:4px;align-items:center;margin-top:1px;">
+          <span id="listen-trans" style="font-size:0.55rem;color:rgba(60,64,67,0.5);flex:1;"></span>
+          <span id="listen-ref" style="font-size:0.45rem;color:rgba(60,64,67,0.3);"></span>
+        </div>
+      </div>
+      <div style="display:flex;gap:3px;flex-shrink:0;">
+        <button onclick="event.stopPropagation();playPhase1('slow')" style="width:28px;height:28px;border:1px solid rgba(60,64,67,0.15);border-radius:50%;background:rgba(255,255,255,0.12);color:var(--stroke);font-size:0.55rem;cursor:pointer;display:flex;align-items:center;justify-content:center;">🐢</button>
+        <button onclick="event.stopPropagation();playPhase1('normal')" style="width:28px;height:28px;border:1px solid rgba(60,64,67,0.15);border-radius:50%;background:rgba(255,255,255,0.12);color:var(--stroke);font-size:0.55rem;cursor:pointer;display:flex;align-items:center;justify-content:center;">🔊</button>
+        <button onclick="event.stopPropagation();startSpeech()" style="width:28px;height:28px;border:1px solid rgba(60,64,67,0.15);border-radius:50%;background:rgba(255,255,255,0.12);color:var(--stroke);font-size:0.55rem;cursor:pointer;display:flex;align-items:center;justify-content:center;">🎤</button>
+      </div>
     </div>
+    <div id="speak-result" style="font-size:0.45rem;color:rgba(60,64,67,0.4);text-align:right;min-height:10px;margin-top:1px;"></div>
   </div>
 
-  <!-- SPEAK tile -->
-  <div class="tile t-speak" onclick="startSpeech()">
-    <div class="tile-label">🎤 speak</div>
-    <div class="speak-inner">
-      <button class="mic-big" id="mic-btn">🎙️</button>
-      <div class="speak-result" id="speak-result">點擊開口唸</div>
-    </div>
-  </div>
-
-  <!-- HINT tile -->
-  <div class="tile t-hint" onclick="openStoryModal()">
-    <div class="tile-label">💡 kanji story</div>
-    <div class="hint-inner">
-      <div class="hint-emoji" id="hint-emoji">✝️</div>
-      <div class="hint-title" id="hint-title">點擊看故事</div>
-    </div>
-  </div>
-
-  <!-- WRITE tile (large) -->
-  <div class="tile t-write">
+  <!-- WRITE tile (dynamic mosaic) -->
+  <div class="tile t-write" id="write-tile">
     <div class="tile-label">✍️ handwriting</div>
-    <div class="write-inner">
-      <div class="write-prompt" id="write-prompt"></div>
-      <div class="write-grid" id="write-grid">
-        <canvas id="hint-canvas" class="hint-cv"></canvas>
-        <canvas id="draw-canvas" class="draw-cv"></canvas>
-      </div>
-      <div class="write-btns">
-        <button class="write-btn clear" onclick="clearCanvas()">❌ 重寫</button>
-        <button class="write-btn submit" onclick="submitWrite()">🔍 交卷</button>
-      </div>
-    </div>
   </div>
 
   <!-- BONUS tile -->
@@ -337,74 +325,54 @@ function startSpeech(){
 // ══════════════════════════════════════════
 // HINT TILE
 // ══════════════════════════════════════════
-function buildHint(u){
-  if(!u.kanjiTask)return;
-  document.getElementById('hint-emoji').textContent=u.kanjiTask.emoji;
-  document.getElementById('hint-title').textContent=u.kanjiTask.target;
-}
-function openStoryModal(){
-  const u=getUnit();if(!u?.kanjiTask)return;const k=u.kanjiTask;
-  document.getElementById('story-emoji').textContent=k.emoji;
-  document.getElementById('story-title').textContent=k.title;
-  document.getElementById('story-body').textContent=k.story;
-  document.getElementById('story-modal').classList.add('open');
-}
+function buildHint(u){ /* removed — TC users know kanji */ }
+function buildSpeak(u){ document.getElementById('speak-result').textContent=''; }
 
 // ══════════════════════════════════════════
-// WRITE TILE (canvas)
+// WRITE TILE — WP Tile Mosaic (full sentence)
 // ══════════════════════════════════════════
+const TB={noun:'#8FA88B',verb:'#7B9DAB',particle:'#C4877A',adj:'#C9B88C',other:'#A8A49B'};
+function isKanjiChar(ch){const c=ch.codePointAt(0);return(c>=0x4E00&&c<=0x9FFF)||(c>=0x3400&&c<=0x4DBF);}
+function getCharTypeMap(u){const map=[],chars=[...u.fullSentence];let pos=0;for(const ck of u.chunks){for(const cc of[...ck.text]){if(pos<chars.length&&chars[pos]===cc){map[pos]=ck.type;pos++;}}}for(let i=0;i<chars.length;i++)if(!map[i])map[i]='other';return map;}
+function simPack(chars,cols){const MR=40,o=Array.from({length:MR},()=>new Array(cols).fill(false));let maxR=0;for(const ch of chars){const cs=isKanjiChar(ch)?2:1,rs=cs;let placed=false;for(let r=0;r<MR-rs&&!placed;r++)for(let c=0;c<=cols-cs&&!placed;c++){let ok=true;for(let dr=0;dr<rs&&ok;dr++)for(let dc=0;dc<cs&&ok;dc++)if(o[r+dr][c+dc])ok=false;if(ok){for(let dr=0;dr<rs;dr++)for(let dc=0;dc<cs;dc++)o[r+dr][c+dc]=true;maxR=Math.max(maxR,r+rs);placed=true;}}}return maxR;}
+
 function buildWrite(u){
-  if(!u?.kanjiTask)return;
-  document.getElementById('write-prompt').textContent='寫出：'+u.kanjiTask.target;
+  if(!u)return;const sentence=u.fullSentence,chars=[...sentence],typeMap=getCharTypeMap(u);
+  const writeTile=document.querySelector('.t-write');if(!writeTile)return;
+  writeTile.innerHTML='';writeTile.style.cssText+='display:flex;flex-direction:column;padding:6px 10px;';
+  const hd=document.createElement('div');hd.style.cssText='display:flex;align-items:center;justify-content:space-between;flex-shrink:0;margin-bottom:3px;';hd.innerHTML='<span style="font-size:0.45rem;font-weight:700;color:rgba(60,64,67,0.45);text-transform:uppercase;letter-spacing:1px;">✍️ handwriting</span><span style="font-size:0.7rem;font-weight:700;color:#F0EBE1;">🇹🇼 '+u.translation+'</span>';writeTile.appendChild(hd);
+  const vw=writeTile.getBoundingClientRect().width-20,vh=writeTile.getBoundingClientRect().height-56,gap=3;
+  let bestCols=6,bestCell=30;
+  for(let cols=3;cols<=7;cols++){const cW=Math.floor((vw-gap*(cols+1))/cols),rows=simPack(chars,cols);if(!rows)continue;const cH=Math.floor((vh-gap*(rows+1))/rows),c=Math.min(cW,cH,200);if(c>bestCell){bestCell=c;bestCols=cols;}}
+  const numCols=bestCols,cell=bestCell,MR=40,occ=Array.from({length:MR},()=>new Array(numCols).fill(false));
+  function findSlot(cs,rs){for(let r=0;r<MR-rs;r++)for(let c=0;c<=numCols-cs;c++){let ok=true;for(let dr=0;dr<rs&&ok;dr++)for(let dc=0;dc<cs&&ok;dc++)if(occ[r+dr][c+dc])ok=false;if(ok)return{r,c};}return{r:0,c:0};}
+  function place(r,c,cs,rs){for(let dr=0;dr<rs;dr++)for(let dc=0;dc<cs;dc++)occ[r+dr][c+dc]=true;}
+  const tiles=[];chars.forEach((ch,i)=>{const isK=isKanjiChar(ch),isPu=/[、。！？「」（）]/.test(ch),cs=isK?2:1,rs=cs,s=findSlot(cs,rs);place(s.r,s.c,cs,rs);tiles.push({idx:i,col:s.c+1,row:s.r+1,cs,rs,type:isPu?'other':(typeMap[i]||'other'),isK});});
+  const gridWrap=document.createElement('div');gridWrap.style.cssText='flex:1;display:flex;align-items:center;justify-content:center;min-height:0;';
+  const g=document.createElement('div');g.style.cssText='display:grid;gap:'+gap+'px;grid-template-columns:repeat('+numCols+','+cell+'px);grid-auto-rows:'+cell+'px;justify-content:center;';
+  window._p3Chars=chars;window._p3TileSizes=[];
+  tiles.forEach(t=>{const bg=TB[t.type]||TB.other,tile=document.createElement('div');tile.id='p3-box-'+t.idx;tile.style.cssText='grid-column:'+t.col+'/span '+t.cs+';grid-row:'+t.row+'/span '+t.rs+';background:'+bg+';border-radius:4px;position:relative;overflow:hidden;cursor:crosshair;box-shadow:0 1px 4px rgba(0,0,0,0.3);';const sz=cell*(t.isK?2:1)+(t.isK?gap:0);window._p3TileSizes[t.idx]=sz;const dc=document.createElement('canvas');dc.id='p3-draw-'+t.idx;dc.style.cssText='position:absolute;inset:0;width:100%;height:100%;z-index:2;touch-action:none;';tile.appendChild(dc);const lb=document.createElement('span');lb.style.cssText='position:absolute;bottom:1px;left:3px;z-index:3;font-size:0.8rem;color:#1a1a2e;pointer-events:none;font-weight:700;';lb.textContent=(t.idx+1);tile.appendChild(lb);if(t.isK){const tg=document.createElement('span');tg.style.cssText='position:absolute;top:2px;right:3px;z-index:3;font-size:0.45rem;color:rgba(62,50,43,0.45);pointer-events:none;font-weight:700;';tg.textContent='漢';tile.appendChild(tg);}g.appendChild(tile);});
+  gridWrap.appendChild(g);writeTile.appendChild(gridWrap);
+  const ctrl=document.createElement('div');ctrl.style.cssText='display:flex;gap:6px;justify-content:center;padding:3px 0;flex-shrink:0;';ctrl.innerHTML='<button class="write-btn clear" onclick="clearAllTiles()">❌ 重寫</button><button class="write-btn submit" onclick="submitAllTiles()">🔍 交卷</button>';writeTile.appendChild(ctrl);
+  const leg=document.createElement('div');leg.style.cssText='display:flex;gap:4px;justify-content:center;flex-shrink:0;';[['名','#8FA88B'],['動','#7B9DAB'],['助','#C4877A']].forEach(([t,c])=>{const s=document.createElement('span');s.style.cssText='font-size:0.38rem;color:var(--text-muted);display:flex;align-items:center;gap:1px;';s.innerHTML='<span style="width:4px;height:4px;border-radius:1px;background:'+c+';display:inline-block;"></span>'+t;leg.appendChild(s);});writeTile.appendChild(leg);
 }
 
 function initCanvas(){
-  const u=getUnit();if(!u?.kanjiTask)return;
-  const grid=document.getElementById('write-grid');
-  const rect=grid.getBoundingClientRect();
-  const sz=Math.min(rect.width,rect.height)||200;
-  const hc=document.getElementById('hint-canvas'),dc=document.getElementById('draw-canvas');
-  // Clone draw canvas to clear events
-  const clone=dc.cloneNode(true);dc.parentNode.replaceChild(clone,dc);
-  const fc=document.getElementById('draw-canvas');
-  const dpr=window.devicePixelRatio||1;
-  [hc,fc].forEach(cv=>{cv.width=sz*dpr;cv.height=sz*dpr;});
-  // Draw hint watermark
-  const hctx=hc.getContext('2d');hctx.scale(dpr,dpr);hctx.clearRect(0,0,sz,sz);
-  const target=u.kanjiTask.target;const fontSize=Math.floor(sz*0.7/Math.max(1,target.length));
-  hctx.font=fontSize+'px "Noto Sans JP",sans-serif';hctx.textAlign='center';hctx.textBaseline='middle';
-  hctx.fillStyle='#666';
-  if(target.length===1){hctx.fillText(target,sz/2,sz/2);}
-  else{const chars=[...target];const cw=sz/chars.length;chars.forEach((ch,i)=>{hctx.fillText(ch,cw*i+cw/2,sz/2);});}
-  // Setup drawing
-  const ctx=fc.getContext('2d');ctx.scale(dpr,dpr);ctx.lineCap='round';ctx.lineJoin='round';ctx.lineWidth=Math.max(3,sz*0.025);ctx.strokeStyle='#3C4043';
-  let d=false,lx=0,ly=0;hasWritten=false;
-  function gp(e){const r=fc.getBoundingClientRect();const cx=e.touches?e.touches[0].clientX:e.clientX;const cy=e.touches?e.touches[0].clientY:e.clientY;return{x:(cx-r.left)*(fc.width/dpr/r.width),y:(cy-r.top)*(fc.height/dpr/r.height)};}
-  fc.addEventListener('mousedown',e=>{e.preventDefault();d=true;hasWritten=true;const p=gp(e);lx=p.x;ly=p.y;ctx.beginPath();ctx.moveTo(p.x,p.y);});
-  fc.addEventListener('mousemove',e=>{if(!d)return;e.preventDefault();const p=gp(e);ctx.lineTo(p.x,p.y);ctx.stroke();ctx.beginPath();ctx.moveTo(p.x,p.y);});
-  fc.addEventListener('mouseup',()=>d=false);
-  fc.addEventListener('touchstart',e=>{e.preventDefault();d=true;hasWritten=true;const p=gp(e);ctx.beginPath();ctx.moveTo(p.x,p.y);},{passive:false});
-  fc.addEventListener('touchmove',e=>{if(!d)return;e.preventDefault();const p=gp(e);ctx.lineTo(p.x,p.y);ctx.stroke();ctx.beginPath();ctx.moveTo(p.x,p.y);},{passive:false});
-  fc.addEventListener('touchend',()=>d=false);
+  const chars=window._p3Chars;if(!chars)return;const sizes=window._p3TileSizes||[];
+  chars.forEach((ch,i)=>{const dc=document.getElementById('p3-draw-'+i);if(!dc)return;const sz=sizes[i]||60;const clone=dc.cloneNode(true);dc.parentNode.replaceChild(clone,dc);const fc=document.getElementById('p3-draw-'+i);fc.width=sz;fc.height=sz;const ctx=fc.getContext('2d');ctx.lineCap='round';ctx.lineJoin='round';ctx.lineWidth=Math.max(2,sz*0.025);ctx.strokeStyle='#3C4043';let d=false;function gp(e){const r=fc.getBoundingClientRect(),cx=e.touches?e.touches[0].clientX:e.clientX,cy=e.touches?e.touches[0].clientY:e.clientY;return{x:(cx-r.left)*(fc.width/r.width),y:(cy-r.top)*(fc.height/r.height)};}fc.addEventListener('mousedown',e=>{e.preventDefault();d=true;hasWritten=true;const p=gp(e);ctx.beginPath();ctx.moveTo(p.x,p.y);});fc.addEventListener('mousemove',e=>{if(!d)return;e.preventDefault();const p=gp(e);ctx.lineTo(p.x,p.y);ctx.stroke();});fc.addEventListener('mouseup',()=>d=false);fc.addEventListener('touchstart',e=>{e.preventDefault();d=true;hasWritten=true;const p=gp(e);ctx.beginPath();ctx.moveTo(p.x,p.y);},{passive:false});fc.addEventListener('touchmove',e=>{if(!d)return;e.preventDefault();const p=gp(e);ctx.lineTo(p.x,p.y);ctx.stroke();},{passive:false});fc.addEventListener('touchend',()=>d=false);});
+  hasWritten=false;
 }
 
-function clearCanvas(){const dc=document.getElementById('draw-canvas');const dpr=window.devicePixelRatio||1;dc.getContext('2d').clearRect(0,0,dc.width/dpr,dc.height/dpr);hasWritten=false;}
+function clearAllTiles(){const chars=window._p3Chars;if(!chars)return;chars.forEach((c,i)=>{const cv=document.getElementById('p3-draw-'+i);if(cv)cv.getContext('2d').clearRect(0,0,cv.width,cv.height);const bx=document.getElementById('p3-box-'+i);if(bx)bx.style.boxShadow='0 1px 4px rgba(0,0,0,0.3)';});hasWritten=false;}
 
-async function submitWrite(){
+async function submitAllTiles(){
   if(!hasWritten){showToast('請先寫字！✍️');return;}
-  const u=getUnit();if(!u?.kanjiTask)return;
-  const target=u.kanjiTask.target;
-  if(GEMINI_KEY){
-    const dc=document.getElementById('draw-canvas');const img=dc.toDataURL('image/png').split(',')[1];
-    try{
-      const res=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key='+GEMINI_KEY,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts:[{inlineData:{mimeType:'image/png',data:img}},{text:'你是手寫日文辨識器。目標：'+target+'\n只回傳JSON：{"char":"你看到的字"}'}]}]})});
-      const data=await res.json();const txt=data.candidates?.[0]?.content?.parts?.[0]?.text||'';const p=JSON.parse(txt.replace(/```json|```/g,'').trim());const seen=p.char||'？';
-      showOcrToast(seen,target);
-      const score=seen===target?12:3;totalScore+=score;
-      showScorePopup(score,seen===target?'完美辨識！':'AI 看成「'+seen+'」');
-    }catch(e){totalScore+=6;showScorePopup(6,'已完成（OCR 錯誤）');}
-  }else{totalScore+=6;showScorePopup(6,'已完成（無 AI）');}
-  updateProgress();saveProgress();
+  const chars=window._p3Chars,u=getUnit();if(!chars||!u)return;let ok=0;
+  for(let i=0;i<chars.length;i++){const bx=document.getElementById('p3-box-'+i),cv=document.getElementById('p3-draw-'+i);if(!cv||!bx)continue;
+    if(GEMINI_KEY){try{const img=cv.toDataURL('image/png').split(',')[1];const res=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key='+GEMINI_KEY,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts:[{inlineData:{mimeType:'image/png',data:img}},{text:'你是手寫日文辨識器。目標字：'+chars[i]+'\n只回傳JSON：{"char":"你看到的字"}'}]}]})});const data=await res.json();const txt=data.candidates?.[0]?.content?.parts?.[0]?.text||'';const p=JSON.parse(txt.replace(/```json|```/g,'').trim());const seen=p.char||'？';if(seen===chars[i]){bx.style.boxShadow='0 0 0 3px #00e676,0 2px 8px rgba(0,230,118,0.4)';ok++;}else{bx.style.boxShadow='0 0 0 3px #C4877A';showOcrToast(seen,chars[i]);}}catch(e){ok+=0.5;}}
+    else{bx.style.boxShadow='0 0 0 3px #00e676';ok++;}}
+  const pct=ok/chars.length,score=Math.round(pct*12);totalScore+=score;
+  showScorePopup(score,pct>=0.9?'完美！':pct>=0.6?'不錯！':'繼續加油');updateProgress();saveProgress();
   setTimeout(()=>{document.querySelector('.score-popup')?.remove();const units=getUnits();if(currentIdx<units.length-1){currentIdx++;renderPills();loadUnit();saveProgress();}else{showToast('🎉 本章完成！');}},2500);
 }
 
