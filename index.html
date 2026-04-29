@@ -149,6 +149,15 @@ body{font-family:'Noto Sans TC','M PLUS Rounded 1c',sans-serif;background:var(--
 <div id="mastery-summary" class="mastery-list"><span class="mastery-empty">點擊文法卡片中的練習題開始累積！</span></div>
 <div style="margin-top:8px;"><button class="modal-btn cancel" onclick="clearMastery()" style="width:100%;text-align:center;font-size:0.65rem;">🗑️ 清除掌握紀錄</button></div>
 </div>
+<div style="padding:10px;background:rgba(255,255,255,0.03);border-radius:10px;border:1px solid var(--border);margin-bottom:14px;">
+<label>💾 經文快取 匯出/匯入</label>
+<div style="font-size:0.6rem;color:var(--text-muted);margin-bottom:8px;line-height:1.5;">匯出已分析的經文 JSON，可在其他裝置匯入。先到先贏：匯入時不覆蓋已有的經文。</div>
+<div id="export-stats" style="font-size:0.55rem;color:var(--gold);margin-bottom:6px;"></div>
+<div style="display:flex;gap:6px;">
+<button class="modal-btn cancel" onclick="exportCache()" style="flex:1;text-align:center;font-size:0.65rem;">📤 匯出 JSON</button>
+<label class="modal-btn cancel" style="flex:1;text-align:center;font-size:0.65rem;cursor:pointer;">📥 匯入 JSON<input type="file" accept=".json" onchange="importCache(event)" style="display:none;"></label>
+</div>
+</div>
 <div class="modal-btns"><button class="modal-btn cancel" onclick="closeSettings()">取消</button><button class="modal-btn save" onclick="saveSettings()">✅ 儲存</button></div>
 </div></div>
 <div class="modal-overlay" id="grammar-modal"><div class="gm">
@@ -373,8 +382,51 @@ function startSpeech(){
 }
 
 // ═══ SETTINGS ═══
-function openSettings(){document.getElementById('settings-modal').classList.add('open');document.getElementById('gemini-key-input').value=GEMINI_KEY;document.getElementById('current-model').textContent=GEMINI_MODEL;countCache();populateMasteryDisplay();}
+function openSettings(){document.getElementById('settings-modal').classList.add('open');document.getElementById('gemini-key-input').value=GEMINI_KEY;document.getElementById('current-model').textContent=GEMINI_MODEL;countCache();populateMasteryDisplay();updateExportStats();}
 function resetModel(){GEMINI_MODEL=GEMINI_MODELS[0];try{localStorage.setItem('bible-gemini-model',GEMINI_MODEL);}catch(e){}document.getElementById('current-model').textContent=GEMINI_MODEL;showToast('🔄 已重設為 '+GEMINI_MODEL);}
+
+function updateExportStats(){
+  const keys=Object.keys(localStorage).filter(k=>k.startsWith('bg-'));
+  const totalBytes=keys.reduce((s,k)=>s+localStorage.getItem(k).length*2,0);
+  const books=new Set(keys.map(k=>k.split('-')[1]));
+  document.getElementById('export-stats').textContent='📦 已快取 '+keys.length+' 節（'+books.size+' 卷）≈ '+(totalBytes/1024).toFixed(0)+' KB';
+}
+
+function exportCache(){
+  const keys=Object.keys(localStorage).filter(k=>k.startsWith('bg-'));
+  if(!keys.length){showToast('沒有可匯出的快取');return;}
+  const data={};
+  keys.forEach(k=>{try{data[k]=JSON.parse(localStorage.getItem(k));}catch(e){}});
+  const blob=new Blob([JSON.stringify({version:2,exportedAt:new Date().toISOString(),count:keys.length,verses:data})],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;
+  a.download='bible-cache-'+new Date().toISOString().slice(0,10)+'-'+keys.length+'v.json';
+  a.click();URL.revokeObjectURL(url);
+  showToast('📤 已匯出 '+keys.length+' 節');
+}
+
+function importCache(event){
+  const file=event.target.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      const json=JSON.parse(e.target.result);
+      const verses=json.verses||json;// support both wrapped and raw format
+      if(typeof verses!=='object'){showToast('❌ 無效的 JSON 格式');return;}
+      let imported=0,skipped=0;
+      Object.keys(verses).forEach(k=>{
+        if(!k.startsWith('bg-'))return;
+        // First-come-first-served: don't overwrite existing
+        if(localStorage.getItem(k)){skipped++;return;}
+        try{localStorage.setItem(k,typeof verses[k]==='string'?verses[k]:JSON.stringify(verses[k]));imported++;}catch(e){}
+      });
+      showToast('📥 匯入 '+imported+' 節'+(skipped?' (跳過 '+skipped+' 節已存在)':''));
+      countCache();updateExportStats();renderVersePills();
+    }catch(err){showToast('❌ JSON 解析失敗：'+err.message.slice(0,30));}
+  };
+  reader.readAsText(file);
+  event.target.value='';// reset input so same file can be selected again
+}
 function closeSettings(){document.getElementById('settings-modal').classList.remove('open');}
 function saveSettings(){GEMINI_KEY=document.getElementById('gemini-key-input').value.trim();localStorage.setItem('bible-gemini-key',GEMINI_KEY);closeSettings();}
 function clearCacheReload(){if(!confirm('清除快取並重新載入？'))return;caches.keys().then(k=>Promise.all(k.map(c=>caches.delete(c)))).then(()=>navigator.serviceWorker?.getRegistrations()).then(r=>r?Promise.all(r.map(x=>x.unregister())):0).then(()=>location.reload(true)).catch(()=>location.reload(true));}
