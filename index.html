@@ -575,7 +575,7 @@ async function loadVerse(num){
       const msg=e.message||'';
       if(msg==='NO_KEY')showToast('請先設定 Gemini API Key ⚙️');
       else if(msg==='BAD_KEY')showToast('❌ API Key 無效，請重設 ⚙️');
-      else if(msg==='QUOTA')showToast('⏳ 配額用完，請稍後再試或明天 16:00 重置');
+      else if(msg==='QUOTA')showToast('⏳ 配額用完，請稍後再試（RPD 每日台灣 15:00 重置）');
       else if(msg.startsWith('MODEL_'))showToast('❌ 模型不可用，已嘗試所有備援');
       else if(msg.startsWith('API_'))showToast('❌ '+msg);
       else showToast('AI 分析失敗：'+msg.slice(0,40));
@@ -1088,10 +1088,24 @@ const _apiLog=[];// timestamps of recent calls
 let _apiStatus='idle';// idle|ok|warn|err|quota
 let _apiLastError='';
 let _apiTotalCalls=0;
+let _apiRPD=0;// requests today (persisted)
+let _apiRPDDate='';// date string for RPD reset detection
+
+function apiInitRPD(){
+  try{
+    const saved=localStorage.getItem('bible-api-rpd');
+    const savedDate=localStorage.getItem('bible-api-rpd-date');
+    const today=new Date().toLocaleDateString('en-US',{timeZone:'America/Los_Angeles'});
+    if(savedDate===today&&saved){_apiRPD=parseInt(saved)||0;_apiRPDDate=today;}
+    else{_apiRPD=0;_apiRPDDate=today;localStorage.setItem('bible-api-rpd','0');localStorage.setItem('bible-api-rpd-date',today);}
+  }catch(e){_apiRPD=0;}
+}
 
 function apiTrackCall(success,errorMsg){
   _apiLog.push(Date.now());
   _apiTotalCalls++;
+  _apiRPD++;
+  try{localStorage.setItem('bible-api-rpd',_apiRPD+'');localStorage.setItem('bible-api-rpd-date',_apiRPDDate);}catch(e){}
   // Keep only last 2 minutes of data
   const cutoff=Date.now()-120000;
   while(_apiLog.length&&_apiLog[0]<cutoff)_apiLog.shift();
@@ -1114,9 +1128,9 @@ function apiUpdateBadge(){
     el.textContent='❌ 錯誤';el.className='api-badge err';
   }else if(rpm>0){
     el.textContent=rpm+'/min'+(_prefetchActive?' 📥':'');
-    el.className='api-badge '+(rpm>=12?'warn':'ok');
+    el.className='api-badge '+(rpm>=8?'warn':'ok');
   }else if(_apiTotalCalls>0){
-    el.textContent='✓ 就緒';el.className='api-badge ok';
+    el.textContent=_apiRPD+'/250';el.className='api-badge '+(_apiRPD>=200?'warn':'ok');
   }else if(GEMINI_KEY){
     el.textContent='✓ 就緒';el.className='api-badge ok';
   }else{
@@ -1129,7 +1143,7 @@ function showApiStatus(){
   const lines=['📊 API 配額狀態','','模型：'+GEMINI_MODEL,'本次呼叫：'+_apiTotalCalls+' 次','近 1 分鐘：'+rpm+' 次',
     '狀態：'+({idle:'待機',ok:'✅ 正常',warn:'⚠️ 接近上限',err:'❌ '+_apiLastError,quota:'⏳ 配額用完'}[_apiStatus]||_apiStatus),
     '背景預載：'+(_prefetchActive?'進行中 (剩 '+_prefetchQueue.filter(v=>!localStorage.getItem('bg-'+curBook+'-'+curChapter+'-'+v)).length+'節)':'未啟動'),
-    '','Gemini 免費額度：15 RPM / 1500 RPD','預載限制：≤10 RPM（保留 5 RPM 給手寫）','（每日台灣時間 16:00 重置）'];
+    '','Gemini 2.5 Flash 免費額度：10 RPM / 250 RPD','預載限制：≤7 RPM（保留 3 RPM 給手寫）','今日已用：'+_apiRPD+' / 250 RPD','（每日太平洋午夜重置 ≈ 台灣 15:00 夏令 / 16:00 冬令）'];
   alert(lines.join('\n'));
 }
 
@@ -1141,8 +1155,9 @@ setInterval(apiUpdateBadge,10000);
 // Rate-limited: max 5 RPM (reserves 10 RPM for OCR/normal use)
 // Stops on quota error (429) to preserve remaining API calls
 let _prefetchActive=false,_prefetchAbort=false,_prefetchQueue=[];
-const PREFETCH_INTERVAL=13000;// 13 sec between calls (~4.6/min, safely under 5 RPM)
-const PREFETCH_RPM_LIMIT=10;// stop prefetch if total RPM reaches this
+const PREFETCH_INTERVAL=20000;// 20 sec between calls (~3/min)
+const PREFETCH_RPM_LIMIT=7;// stop prefetch if total RPM reaches this (reserve 3 for OCR/normal)
+const PREFETCH_RPD_RESERVE=100;// stop prefetch when RPD remaining < this
 
 async function startPrefetch(){
   if(_prefetchActive||!GEMINI_KEY)return;
@@ -1158,7 +1173,7 @@ async function startPrefetch(){
   if(!_prefetchQueue.length){console.log('Prefetch: chapter complete');return;}
   _prefetchActive=true;_prefetchAbort=false;
   console.log('Prefetch: starting '+book+' '+chapter+' ('+_prefetchQueue.length+'/'+totalVerses+' missing)');
-  showToast('📥 背景預載 '+book+' '+chapter+'章 ('+_prefetchQueue.length+'節)');
+  showToast('📥 背景預載 '+book+' '+chapter+'章 ('+_prefetchQueue.length+'節，已用 '+_apiRPD+'/250)');
   apiUpdateBadge();
   for(const v of _prefetchQueue){
     if(_prefetchAbort)break;
@@ -1171,6 +1186,12 @@ async function startPrefetch(){
       // Wait until RPM drops
       await new Promise(r=>setTimeout(r,30000));
       if(_prefetchAbort||curBook!==book||curChapter!==chapter)break;
+    }
+    // Check RPD limit: stop prefetch if approaching daily cap
+    if(_apiRPD>=250-PREFETCH_RPD_RESERVE){
+      console.log('Prefetch: RPD reserve reached ('+_apiRPD+'/250), stopping');
+      showToast('📥 預載停止（保留 '+PREFETCH_RPD_RESERVE+' 次給正常使用）');
+      break;
     }
     // Skip if already cached (might have been loaded by user in the meantime)
     const ck='bg-'+book+'-'+chapter+'-'+v;
@@ -1519,6 +1540,7 @@ async function driveUploadVerse(book,chapter,verse,unitData){
 // ═══ INIT ═══
 window.addEventListener('load',()=>{
   try{GEMINI_KEY=localStorage.getItem('bible-gemini-key')||'';}catch(e){}
+  apiInitRPD();
   apiUpdateBadge();
   loadProgress();switchTestament(curTestament);
   const sel=document.getElementById('book-select');
