@@ -813,22 +813,50 @@ function buildWrite(u){
 }
 
 // ═══ DICTATION MODE: per-segment blur + voice hint ═══
+let _dictationActive=false;// toggle state for dictation mode
+function toggleDictation(){
+  if(_dictationActive){
+    // Turn OFF: unblur and restore button color
+    unblurAllChunks();
+    _dictationActive=false;
+    updateSegNavStyle();
+  }else{
+    // Turn ON: blur current segment
+    blurCurrentSegChunks();
+    _dictationActive=true;
+    updateSegNavStyle();
+  }
+}
+function activateDictation(){
+  if(!_dictationActive){_dictationActive=true;blurCurrentSegChunks();updateSegNavStyle();}
+}
+function updateSegNavStyle(){
+  // Update the active segment button color: dictation ON = pulsing accent, OFF = normal
+  const btns=document.querySelectorAll('.seg-nav-btn');
+  btns.forEach(b=>{
+    const idx=parseInt(b.dataset.seg);
+    if(idx===_writeSegIdx){
+      if(_dictationActive){
+        b.style.background='#C4877A';b.style.color='#F0EBE1';b.style.boxShadow='0 0 0 2px rgba(196,135,122,0.5)';
+      }else{
+        b.style.background='rgba(60,64,67,0.3)';b.style.color='#F0EBE1';b.style.boxShadow='none';
+      }
+    }
+  });
+}
 function blurCurrentSegChunks(){
   if(!currentUnit||!_writeSegs.length)return;
   const chunks=currentUnit.chunks||[];
   const segIdx=_writeSegIdx;
   const segText=_writeSegs[segIdx]||'';
-  // Find character range for current segment
   let segStart=0;
   for(let i=0;i<segIdx;i++)segStart+=[..._writeSegs[i]].length;
   const segEnd=segStart+[...segText].length;
-  // Map each chunk to character positions (punctuation-stripped)
   let pos=0;const chunkRanges=[];
   for(const c of chunks){
     const cLen=[...c.text].filter(ch=>!/[。，、！？「」（）；：\s　]/.test(ch)).length;
     chunkRanges.push({start:pos,end:pos+cLen});pos+=cLen;
   }
-  // Apply blur to overlapping chunks only
   const wraps=document.querySelectorAll('.chunk-wrap');
   wraps.forEach((w,ci)=>{
     const range=chunkRanges[ci];if(!range)return;
@@ -869,12 +897,11 @@ function buildWriteSegment(u,segIdx){
   const fullTypeMap=getCharTypeMap(u),typeMap=fullTypeMap.slice(segStart,segStart+chars.length);
   const wt=document.querySelector('.t-write');if(!wt)return;
   wt.innerHTML='';wt.style.cssText+='display:flex;flex-direction:column;padding:6px 10px;';
-  let segNav='';if(_writeSegs.length>1){segNav='<div style="display:flex;gap:2px;align-items:center;">';_writeSegs.forEach((s,i)=>{segNav+='<span onclick="buildWriteSegment(currentUnit,'+i+')" style="display:inline-block;width:18px;height:18px;line-height:18px;text-align:center;border-radius:50%;font-size:0.5rem;font-weight:700;cursor:pointer;'+(i===segIdx?'background:#C4877A;color:#F0EBE1;':i<segIdx?'background:#8FA88B;color:#F0EBE1;':'background:rgba(60,64,67,0.15);color:#6B6860;')+'">'+(i+1)+'</span>';});segNav+='</div>';}
+  let segNav='';if(_writeSegs.length>1){segNav='<div style="display:flex;gap:2px;align-items:center;">';_writeSegs.forEach((s,i)=>{segNav+='<span class="seg-nav-btn" data-seg="'+i+'" onclick="if(_writeSegIdx!=='+i+'){_dictationActive=false;buildWriteSegment(currentUnit,'+i+');}else{toggleDictation();}" style="display:inline-block;width:18px;height:18px;line-height:18px;text-align:center;border-radius:50%;font-size:0.5rem;font-weight:700;cursor:pointer;'+(i===segIdx?'background:rgba(60,64,67,0.3);color:#F0EBE1;':i<segIdx?'background:#8FA88B;color:#F0EBE1;':'background:rgba(60,64,67,0.15);color:#6B6860;')+'">'+(i+1)+'</span>';});segNav+='</div>';}
   const hd=document.createElement('div');hd.style.cssText='display:flex;align-items:center;justify-content:space-between;flex-shrink:0;margin-bottom:3px;gap:4px;position:relative;z-index:10;';
-  hd.innerHTML='<div style="display:flex;gap:3px;align-items:center;"><button onclick="clearAllTiles()" style="padding:3px 7px;border:none;border-radius:6px;font-size:0.55rem;font-weight:700;cursor:pointer;background:rgba(60,64,67,0.2);color:#3C4043;">❌</button><button onclick="submitSegment()" style="padding:3px 7px;border:none;border-radius:6px;font-size:0.55rem;font-weight:700;cursor:pointer;background:#C4877A;color:#F0EBE1;">🔍</button><button class="voice-hint-btn" onclick="event.stopPropagation();playWriteHint(\'normal\')" title="語音提示">🔊</button><button class="voice-hint-btn" onclick="event.stopPropagation();playWriteHint(\'slow\')" title="慢速語音">🐢</button>'+segNav+'</div><span style="font-size:0.55rem;font-weight:700;color:#F0EBE1;max-width:40%;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">🇹🇼 '+(u.translation||'')+'</span>';
+  hd.innerHTML='<div style="display:flex;gap:3px;align-items:center;"><button onclick="clearAllTiles()" style="padding:3px 7px;border:none;border-radius:6px;font-size:0.55rem;font-weight:700;cursor:pointer;background:rgba(60,64,67,0.2);color:#3C4043;">❌</button><button onclick="submitSegment()" style="padding:3px 7px;border:none;border-radius:6px;font-size:0.55rem;font-weight:700;cursor:pointer;background:#C4877A;color:#F0EBE1;">🔍</button><button class="voice-hint-btn" onclick="event.stopPropagation();activateDictation();playWriteHint(\'normal\')" title="語音提示">🔊</button><button class="voice-hint-btn" onclick="event.stopPropagation();activateDictation();playWriteHint(\'slow\')" title="慢速語音">🐢</button>'+segNav+'</div><span style="font-size:0.55rem;font-weight:700;color:#F0EBE1;max-width:40%;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">🇹🇼 '+(u.translation||'')+'</span>';
   wt.appendChild(hd);
-  // Blur only the current segment's chunks in listen area
-  blurCurrentSegChunks();
+  // Don't auto-blur: wait for user to actively start writing (click segment / voice hint / draw)
   const vw=wt.getBoundingClientRect().width-20,vh=wt.getBoundingClientRect().height-30,gap=3;
   let bestCols=6,bestCell=30;for(let cols=3;cols<=7;cols++){const cW=Math.floor((vw-gap*(cols+1))/cols),rows=simPack(chars,cols);if(!rows)continue;const cH=Math.floor((vh-gap*(rows+1))/rows),c=Math.min(cW,cH,200);if(c>bestCell){bestCell=c;bestCols=cols;}}
   const numCols=bestCols,cell=bestCell,MR=40,occ=Array.from({length:MR},()=>new Array(numCols).fill(false));
@@ -890,7 +917,7 @@ function buildWriteSegment(u,segIdx){
   gw.appendChild(g);wt.appendChild(gw);setTimeout(()=>initCanvas(),200);hasWritten=false;
 }
 
-function initCanvas(){const chars=window._p3Chars;if(!chars)return;const sizes=window._p3TileSizes||[];chars.forEach((ch,i)=>{const dc=document.getElementById('p3-draw-'+i);if(!dc)return;const sz=sizes[i]||60;const clone=dc.cloneNode(true);dc.parentNode.replaceChild(clone,dc);const fc=document.getElementById('p3-draw-'+i);fc.width=sz;fc.height=sz;const ctx=fc.getContext('2d');ctx.lineCap='round';ctx.lineJoin='round';ctx.lineWidth=Math.max(2,sz*0.025);ctx.strokeStyle='#3C4043';let d=false;function gp(e){const r=fc.getBoundingClientRect(),cx=e.touches?e.touches[0].clientX:e.clientX,cy=e.touches?e.touches[0].clientY:e.clientY;return{x:(cx-r.left)*(fc.width/r.width),y:(cy-r.top)*(fc.height/r.height)};}fc.addEventListener('mousedown',e=>{e.preventDefault();d=true;hasWritten=true;const p=gp(e);ctx.beginPath();ctx.moveTo(p.x,p.y);});fc.addEventListener('mousemove',e=>{if(!d)return;e.preventDefault();const p=gp(e);ctx.lineTo(p.x,p.y);ctx.stroke();});fc.addEventListener('mouseup',()=>d=false);fc.addEventListener('touchstart',e=>{e.preventDefault();d=true;hasWritten=true;const p=gp(e);ctx.beginPath();ctx.moveTo(p.x,p.y);},{passive:false});fc.addEventListener('touchmove',e=>{if(!d)return;e.preventDefault();const p=gp(e);ctx.lineTo(p.x,p.y);ctx.stroke();},{passive:false});fc.addEventListener('touchend',()=>d=false);});hasWritten=false;}
+function initCanvas(){const chars=window._p3Chars;if(!chars)return;const sizes=window._p3TileSizes||[];chars.forEach((ch,i)=>{const dc=document.getElementById('p3-draw-'+i);if(!dc)return;const sz=sizes[i]||60;const clone=dc.cloneNode(true);dc.parentNode.replaceChild(clone,dc);const fc=document.getElementById('p3-draw-'+i);fc.width=sz;fc.height=sz;const ctx=fc.getContext('2d');ctx.lineCap='round';ctx.lineJoin='round';ctx.lineWidth=Math.max(2,sz*0.025);ctx.strokeStyle='#3C4043';let d=false;function gp(e){const r=fc.getBoundingClientRect(),cx=e.touches?e.touches[0].clientX:e.clientX,cy=e.touches?e.touches[0].clientY:e.clientY;return{x:(cx-r.left)*(fc.width/r.width),y:(cy-r.top)*(fc.height/r.height)};}fc.addEventListener('mousedown',e=>{e.preventDefault();d=true;if(!hasWritten)activateDictation();hasWritten=true;const p=gp(e);ctx.beginPath();ctx.moveTo(p.x,p.y);});fc.addEventListener('mousemove',e=>{if(!d)return;e.preventDefault();const p=gp(e);ctx.lineTo(p.x,p.y);ctx.stroke();});fc.addEventListener('mouseup',()=>d=false);fc.addEventListener('touchstart',e=>{e.preventDefault();d=true;if(!hasWritten)activateDictation();hasWritten=true;const p=gp(e);ctx.beginPath();ctx.moveTo(p.x,p.y);},{passive:false});fc.addEventListener('touchmove',e=>{if(!d)return;e.preventDefault();const p=gp(e);ctx.lineTo(p.x,p.y);ctx.stroke();},{passive:false});fc.addEventListener('touchend',()=>d=false);});hasWritten=false;}
 
 function clearAllTiles(){const chars=window._p3Chars;if(!chars)return;chars.forEach((c,i)=>{const cv=document.getElementById('p3-draw-'+i);if(cv)cv.getContext('2d').clearRect(0,0,cv.width,cv.height);const bx=document.getElementById('p3-box-'+i);if(bx){bx.style.boxShadow='0 1px 4px rgba(0,0,0,0.3)';const old=bx.querySelector('.ocr-label');if(old)old.remove();}});hasWritten=false;}
 
@@ -979,7 +1006,7 @@ async function submitSegment(){
   const pct=ok/chars.length,score=Math.round(pct*12);totalScore+=score;
   showScorePopup(score,pct>=0.9?'完美！':pct>=0.6?'不錯！':'繼續加油');updateProgress();saveProgress();
   // Reveal the blurred chunks after scoring
-  unblurAllChunks();
+  _dictationActive=false;unblurAllChunks();
   setTimeout(()=>{document.querySelector('.score-popup')?.remove();
     if(_writeSegIdx+1<_writeSegs.length){showToast('✍️ 第'+(_writeSegIdx+2)+'/'+_writeSegs.length+' 段');buildWriteSegment(currentUnit,_writeSegIdx+1);}
     else{showToast('🎉 整句完成！');setTimeout(()=>{if(curVerse<chapterVerses.length){curVerse++;renderVersePills();loadVerse(curVerse);saveProgress();}},1500);}
