@@ -24,6 +24,11 @@ body{font-family:'Noto Sans TC','M PLUS Rounded 1c',sans-serif;background:var(--
 .api-badge.ok{color:var(--tile-noun);border-color:rgba(143,168,139,0.4);}
 .api-badge.warn{color:var(--gold);border-color:rgba(201,184,140,0.4);}
 .api-badge.err{color:var(--accent);border-color:rgba(196,135,122,0.4);}
+.chunk-blurred .chunk-char,.chunk-blurred .furigana{filter:blur(8px);transition:filter 0.3s;user-select:none;}
+.chunk-blurred:hover .chunk-char,.chunk-blurred:hover .furigana{filter:blur(4px);}
+.chunk-blurred.peek .chunk-char,.chunk-blurred.peek .furigana{filter:none;}
+.voice-hint-btn{padding:3px 7px;border:none;border-radius:6px;font-size:0.55rem;font-weight:700;cursor:pointer;background:var(--tile-verb);color:#3C4043;transition:transform 0.1s;}
+.voice-hint-btn:active{transform:scale(0.9);}
 .nav-row{display:flex;gap:4px;padding:2px 12px 4px;flex-shrink:0;align-items:center;}
 .nav-select{padding:3px 6px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text);font-size:0.6rem;font-family:inherit;outline:none;max-width:35%;}
 .testament-btn{padding:4px 8px;border:none;font-size:0.6rem;font-weight:700;cursor:pointer;font-family:inherit;}
@@ -807,6 +812,56 @@ function buildWrite(u){
   _writeSegs=smartSplit(u.fullSentence,20);_writeSegIdx=0;buildWriteSegment(u,0);
 }
 
+// ═══ DICTATION MODE: per-segment blur + voice hint ═══
+function blurCurrentSegChunks(){
+  if(!currentUnit||!_writeSegs.length)return;
+  const chunks=currentUnit.chunks||[];
+  const segIdx=_writeSegIdx;
+  const segText=_writeSegs[segIdx]||'';
+  // Find character range for current segment
+  let segStart=0;
+  for(let i=0;i<segIdx;i++)segStart+=[..._writeSegs[i]].length;
+  const segEnd=segStart+[...segText].length;
+  // Map each chunk to character positions (punctuation-stripped)
+  let pos=0;const chunkRanges=[];
+  for(const c of chunks){
+    const cLen=[...c.text].filter(ch=>!/[。，、！？「」（）；：\s　]/.test(ch)).length;
+    chunkRanges.push({start:pos,end:pos+cLen});pos+=cLen;
+  }
+  // Apply blur to overlapping chunks only
+  const wraps=document.querySelectorAll('.chunk-wrap');
+  wraps.forEach((w,ci)=>{
+    const range=chunkRanges[ci];if(!range)return;
+    const overlaps=range.start<segEnd&&range.end>segStart;
+    if(overlaps){
+      w.classList.add('chunk-blurred');w.classList.remove('peek');
+      w.onclick=function(e){e.stopPropagation();w.classList.add('peek');setTimeout(()=>w.classList.remove('peek'),2000);};
+    }else{
+      w.classList.remove('chunk-blurred','peek');
+      const chunk=chunks[ci];
+      w.onclick=function(e){e.stopPropagation();if(chunk&&chunk.explanation)showGrammarModal(chunk.explanation,chunk.text);};
+    }
+  });
+}
+function unblurAllChunks(){document.querySelectorAll('.chunk-blurred').forEach(w=>w.classList.remove('chunk-blurred','peek'));}
+function playWriteHint(speed){
+  if(!currentUnit)return;
+  const segText=_writeSegs[_writeSegIdx]||'';
+  const chunks=currentUnit.chunks||[];
+  let segStart=0;
+  for(let i=0;i<_writeSegIdx;i++)segStart+=[..._writeSegs[i]].length;
+  const segEnd=segStart+[...segText].length;
+  let pos=0;const segChunks=[];
+  for(const c of chunks){
+    const cLen=[...c.text.replace(/[。，、！？「」（）；：\s　]/g,'')].length;
+    const cEnd=pos+cLen;
+    if(cEnd>segStart&&pos<segEnd)segChunks.push(c.tts||c.text);
+    pos=cEnd;
+  }
+  const ttsText=segChunks.length?segChunks.join(''):segText;
+  speakJP(ttsText,speed==='slow'?0.5:0.85);
+}
+
 function buildWriteSegment(u,segIdx){
   if(!u||segIdx<0||segIdx>=_writeSegs.length)return;_writeSegIdx=segIdx;
   const segText=_writeSegs[segIdx],chars=[...segText];
@@ -816,8 +871,10 @@ function buildWriteSegment(u,segIdx){
   wt.innerHTML='';wt.style.cssText+='display:flex;flex-direction:column;padding:6px 10px;';
   let segNav='';if(_writeSegs.length>1){segNav='<div style="display:flex;gap:2px;align-items:center;">';_writeSegs.forEach((s,i)=>{segNav+='<span onclick="buildWriteSegment(currentUnit,'+i+')" style="display:inline-block;width:18px;height:18px;line-height:18px;text-align:center;border-radius:50%;font-size:0.5rem;font-weight:700;cursor:pointer;'+(i===segIdx?'background:#C4877A;color:#F0EBE1;':i<segIdx?'background:#8FA88B;color:#F0EBE1;':'background:rgba(60,64,67,0.15);color:#6B6860;')+'">'+(i+1)+'</span>';});segNav+='</div>';}
   const hd=document.createElement('div');hd.style.cssText='display:flex;align-items:center;justify-content:space-between;flex-shrink:0;margin-bottom:3px;gap:4px;position:relative;z-index:10;';
-  hd.innerHTML='<div style="display:flex;gap:3px;align-items:center;"><button onclick="clearAllTiles()" style="padding:3px 7px;border:none;border-radius:6px;font-size:0.55rem;font-weight:700;cursor:pointer;background:rgba(60,64,67,0.2);color:#3C4043;">❌</button><button onclick="submitSegment()" style="padding:3px 7px;border:none;border-radius:6px;font-size:0.55rem;font-weight:700;cursor:pointer;background:#C4877A;color:#F0EBE1;">🔍</button>'+segNav+'</div><span style="font-size:0.55rem;font-weight:700;color:#F0EBE1;max-width:45%;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">🇹🇼 '+(u.translation||'')+'</span>';
+  hd.innerHTML='<div style="display:flex;gap:3px;align-items:center;"><button onclick="clearAllTiles()" style="padding:3px 7px;border:none;border-radius:6px;font-size:0.55rem;font-weight:700;cursor:pointer;background:rgba(60,64,67,0.2);color:#3C4043;">❌</button><button onclick="submitSegment()" style="padding:3px 7px;border:none;border-radius:6px;font-size:0.55rem;font-weight:700;cursor:pointer;background:#C4877A;color:#F0EBE1;">🔍</button><button class="voice-hint-btn" onclick="event.stopPropagation();playWriteHint(\'normal\')" title="語音提示">🔊</button><button class="voice-hint-btn" onclick="event.stopPropagation();playWriteHint(\'slow\')" title="慢速語音">🐢</button>'+segNav+'</div><span style="font-size:0.55rem;font-weight:700;color:#F0EBE1;max-width:40%;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">🇹🇼 '+(u.translation||'')+'</span>';
   wt.appendChild(hd);
+  // Blur only the current segment's chunks in listen area
+  blurCurrentSegChunks();
   const vw=wt.getBoundingClientRect().width-20,vh=wt.getBoundingClientRect().height-30,gap=3;
   let bestCols=6,bestCell=30;for(let cols=3;cols<=7;cols++){const cW=Math.floor((vw-gap*(cols+1))/cols),rows=simPack(chars,cols);if(!rows)continue;const cH=Math.floor((vh-gap*(rows+1))/rows),c=Math.min(cW,cH,200);if(c>bestCell){bestCell=c;bestCols=cols;}}
   const numCols=bestCols,cell=bestCell,MR=40,occ=Array.from({length:MR},()=>new Array(numCols).fill(false));
@@ -921,6 +978,8 @@ async function submitSegment(){
 
   const pct=ok/chars.length,score=Math.round(pct*12);totalScore+=score;
   showScorePopup(score,pct>=0.9?'完美！':pct>=0.6?'不錯！':'繼續加油');updateProgress();saveProgress();
+  // Reveal the blurred chunks after scoring
+  unblurAllChunks();
   setTimeout(()=>{document.querySelector('.score-popup')?.remove();
     if(_writeSegIdx+1<_writeSegs.length){showToast('✍️ 第'+(_writeSegIdx+2)+'/'+_writeSegs.length+' 段');buildWriteSegment(currentUnit,_writeSegIdx+1);}
     else{showToast('🎉 整句完成！');setTimeout(()=>{if(curVerse<chapterVerses.length){curVerse++;renderVersePills();loadVerse(curVerse);saveProgress();}},1500);}
