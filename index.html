@@ -471,6 +471,7 @@ function populateBooks(){
   sel.value=curTestament==='NT'?'JHN':'GEN';curBook=sel.value;onBookChange(false);
 }
 function onBookChange(reset=true){
+  stopPrefetch();
   const sel=document.getElementById('book-select');curBook=sel.value;
   const ch=parseInt(sel.selectedOptions[0]?.dataset.ch)||1;
   const cs=document.getElementById('chapter-select');cs.innerHTML='';
@@ -592,6 +593,8 @@ async function loadVerse(num){
   }
   currentUnit=unit;buildListen(unit);buildWrite(unit);buildBonus(unit);
   setTimeout(()=>initCanvas(),300);updateProgress();setLoading(false);
+  // Schedule background prefetch for remaining verses in this chapter
+  if(unit&&GEMINI_KEY)schedulePrefetch();
 }
 
 // ═══ LISTEN ═══
@@ -1110,7 +1113,7 @@ function apiUpdateBadge(){
   }else if(_apiStatus==='err'){
     el.textContent='❌ 錯誤';el.className='api-badge err';
   }else if(rpm>0){
-    el.textContent=rpm+'/min';
+    el.textContent=rpm+'/min'+(_prefetchActive?' 📥':'');
     el.className='api-badge '+(rpm>=12?'warn':'ok');
   }else if(_apiTotalCalls>0){
     el.textContent='✓ 就緒';el.className='api-badge ok';
@@ -1125,12 +1128,101 @@ function showApiStatus(){
   const rpm=apiGetRPM();
   const lines=['📊 API 配額狀態','','模型：'+GEMINI_MODEL,'本次呼叫：'+_apiTotalCalls+' 次','近 1 分鐘：'+rpm+' 次',
     '狀態：'+({idle:'待機',ok:'✅ 正常',warn:'⚠️ 接近上限',err:'❌ '+_apiLastError,quota:'⏳ 配額用完'}[_apiStatus]||_apiStatus),
-    '','Gemini 免費額度：15 RPM / 1500 RPD','（每日台灣時間 16:00 重置）'];
+    '背景預載：'+(_prefetchActive?'進行中 (剩 '+_prefetchQueue.filter(v=>!localStorage.getItem('bg-'+curBook+'-'+curChapter+'-'+v)).length+'節)':'未啟動'),
+    '','Gemini 免費額度：15 RPM / 1500 RPD','預載限制：≤10 RPM（保留 5 RPM 給手寫）','（每日台灣時間 16:00 重置）'];
   alert(lines.join('\n'));
 }
 
 // Refresh badge every 10 seconds to update RPM countdown
 setInterval(apiUpdateBadge,10000);
+
+// ═══ BACKGROUND CHAPTER PREFETCH ═══
+// Prefetches missing verses for the current chapter in background
+// Rate-limited: max 5 RPM (reserves 10 RPM for OCR/normal use)
+// Stops on quota error (429) to preserve remaining API calls
+let _prefetchActive=false,_prefetchAbort=false,_prefetchQueue=[];
+const PREFETCH_INTERVAL=13000;// 13 sec between calls (~4.6/min, safely under 5 RPM)
+const PREFETCH_RPM_LIMIT=10;// stop prefetch if total RPM reaches this
+
+async function startPrefetch(){
+  if(_prefetchActive||!GEMINI_KEY)return;
+  const book=curBook,chapter=curChapter;
+  const vc=VERSE_COUNTS[book];if(!vc||!vc[chapter-1])return;
+  const totalVerses=vc[chapter-1];
+  // Build queue: missing verses only
+  _prefetchQueue=[];
+  for(let v=1;v<=totalVerses;v++){
+    const ck='bg-'+book+'-'+chapter+'-'+v;
+    if(!localStorage.getItem(ck))_prefetchQueue.push(v);
+  }
+  if(!_prefetchQueue.length){console.log('Prefetch: chapter complete');return;}
+  _prefetchActive=true;_prefetchAbort=false;
+  console.log('Prefetch: starting '+book+' '+chapter+' ('+_prefetchQueue.length+'/'+totalVerses+' missing)');
+  showToast('📥 背景預載 '+book+' '+chapter+'章 ('+_prefetchQueue.length+'節)');
+  apiUpdateBadge();
+  for(const v of _prefetchQueue){
+    if(_prefetchAbort)break;
+    // Check if chapter changed (user navigated away)
+    if(curBook!==book||curChapter!==chapter){console.log('Prefetch: chapter changed, stopping');break;}
+    // Check RPM limit: leave room for OCR
+    if(apiGetRPM()>=PREFETCH_RPM_LIMIT){
+      console.log('Prefetch: RPM limit reached, pausing');
+      showToast('📥 預載暫停（保留配額給手寫辨識）');
+      // Wait until RPM drops
+      await new Promise(r=>setTimeout(r,30000));
+      if(_prefetchAbort||curBook!==book||curChapter!==chapter)break;
+    }
+    // Skip if already cached (might have been loaded by user in the meantime)
+    const ck='bg-'+book+'-'+chapter+'-'+v;
+    if(localStorage.getItem(ck))continue;
+    // Fetch
+    try{
+      const bookName=document.getElementById('book-select').selectedOptions[0]?.textContent||book;
+      const prompt='請查詢日文聖經（口語訳）'+bookName+' 第'+chapter+'章 第'+v+'節，並進行文法分析。';
+      const unit=await analyzeWithGemini(prompt);
+      unit.fullTts=unit.chunks.map(c=>c.tts||c.text).join('');
+      unit.book=book;unit.chapter=chapter;unit.verse=v;
+      localStorage.setItem(ck,JSON.stringify(unit));
+      // Upload to Drive
+      if(typeof driveUploadVerse==='function')driveUploadVerse(book,chapter,v,unit).catch(e=>console.log('Prefetch Drive:',e.message));
+      // Update pills if still on same chapter
+      if(curBook===book&&curChapter===chapter)renderVersePills();
+      console.log('Prefetch: '+book+' '+chapter+':'+v+' ✓');
+    }catch(e){
+      if(e.message==='QUOTA'){
+        showToast('📥 預載停止（配額用完）');
+        console.log('Prefetch: quota hit, stopping');
+        break;
+      }
+      console.log('Prefetch: '+book+' '+chapter+':'+v+' error:',e.message);
+      // Non-quota error: skip this verse, continue
+    }
+    // Wait between calls
+    await new Promise(r=>setTimeout(r,PREFETCH_INTERVAL));
+  }
+  _prefetchActive=false;
+  // Summary
+  let cached=0;const totalV=vc[chapter-1];
+  for(let v=1;v<=totalV;v++){if(localStorage.getItem('bg-'+book+'-'+chapter+'-'+v))cached++;}
+  if(curBook===book&&curChapter===chapter){
+    if(cached>=totalV)showToast('✅ '+book+' '+chapter+'章 全部預載完成！');
+    else showToast('📥 預載完成 ('+cached+'/'+totalV+'節)');
+    renderVersePills();
+  }
+  apiUpdateBadge();
+}
+
+function stopPrefetch(){_prefetchAbort=true;}
+
+// Auto-start prefetch when verse loads (debounced)
+let _prefetchTimer=null;
+function schedulePrefetch(){
+  if(_prefetchTimer)clearTimeout(_prefetchTimer);
+  // Wait 5 seconds after user settles on a verse, then start prefetching
+  _prefetchTimer=setTimeout(()=>{
+    if(!_prefetchActive)startPrefetch();
+  },5000);
+}
 
 // ═══ GOOGLE DRIVE SYNC ENGINE ═══
 // OAuth 2.0 Implicit Grant + Google Drive REST API v3
