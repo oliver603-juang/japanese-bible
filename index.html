@@ -158,6 +158,18 @@ body{font-family:'Noto Sans TC','M PLUS Rounded 1c',sans-serif;background:var(--
 <label class="modal-btn cancel" style="flex:1;text-align:center;font-size:0.65rem;cursor:pointer;">📥 匯入 JSON<input type="file" accept=".json" onchange="importCache(event)" style="display:none;"></label>
 </div>
 </div>
+<div style="padding:10px;background:rgba(255,255,255,0.03);border-radius:10px;border:1px solid var(--border);margin-bottom:14px;">
+<label>☁️ Google Drive 雲端同步</label>
+<div style="font-size:0.6rem;color:var(--text-muted);margin-bottom:8px;line-height:1.5;">登入 Google 帳號，自動跨裝置同步經文快取。按章存檔（1,189 章），先到先贏不覆蓋。</div>
+<div id="drive-status" style="font-size:0.55rem;color:var(--gold);margin-bottom:6px;"></div>
+<div style="display:flex;gap:6px;">
+<button id="drive-login-btn" class="modal-btn cancel" onclick="driveLogin()" style="flex:1;text-align:center;font-size:0.65rem;">🔑 登入 Google</button>
+<button id="drive-sync-btn" class="modal-btn cancel" onclick="driveFullSync()" style="flex:1;text-align:center;font-size:0.65rem;" disabled>🔄 同步</button>
+</div>
+<div style="margin-top:6px;">
+<button id="drive-logout-btn" class="modal-btn cancel" onclick="driveLogout()" style="width:100%;text-align:center;font-size:0.6rem;display:none;">🚪 登出 Google Drive</button>
+</div>
+</div>
 <div class="modal-btns"><button class="modal-btn cancel" onclick="closeSettings()">取消</button><button class="modal-btn save" onclick="saveSettings()">✅ 儲存</button></div>
 </div></div>
 <div class="modal-overlay" id="grammar-modal"><div class="gm">
@@ -382,7 +394,7 @@ function startSpeech(){
 }
 
 // ═══ SETTINGS ═══
-function openSettings(){document.getElementById('settings-modal').classList.add('open');document.getElementById('gemini-key-input').value=GEMINI_KEY;document.getElementById('current-model').textContent=GEMINI_MODEL;countCache();populateMasteryDisplay();updateExportStats();}
+function openSettings(){document.getElementById('settings-modal').classList.add('open');document.getElementById('gemini-key-input').value=GEMINI_KEY;document.getElementById('current-model').textContent=GEMINI_MODEL;countCache();populateMasteryDisplay();updateExportStats();driveUpdateUI();}
 function resetModel(){GEMINI_MODEL=GEMINI_MODELS[0];try{localStorage.setItem('bible-gemini-model',GEMINI_MODEL);}catch(e){}document.getElementById('current-model').textContent=GEMINI_MODEL;showToast('🔄 已重設為 '+GEMINI_MODEL);}
 
 function updateExportStats(){
@@ -545,6 +557,8 @@ async function loadVerse(num){
       unit.fullTts=unit.chunks.map(c=>c.tts||c.text).join('');
       unit.book=curBook;unit.chapter=curChapter;unit.verse=num;
       localStorage.setItem(ck,JSON.stringify(unit));renderVersePills();
+      // Drive sync: upload new verse to cloud
+      if(typeof driveUploadVerse==='function')driveUploadVerse(curBook,curChapter,num,unit).catch(e=>console.log('Drive upload:',e.message));
     }catch(e){
       const msg=e.message||'';
       if(msg==='NO_KEY')showToast('請先設定 Gemini API Key ⚙️');
@@ -973,6 +987,298 @@ function updateProgress(){const t=chapterVerses.length;document.getElementById('
 function showScorePopup(p,d){document.querySelector('.score-popup')?.remove();const div=document.createElement('div');div.className='score-popup show';div.innerHTML='<div class="score-val">+'+p+'</div><div class="score-desc">'+d+'</div>';document.body.appendChild(div);}
 function showToast(m){const d=document.createElement('div');d.className='ocr-toast';d.textContent=m;document.body.appendChild(d);setTimeout(()=>d.remove(),2500);}
 
+// ═══ GOOGLE DRIVE SYNC ENGINE ═══
+// OAuth 2.0 Implicit Grant + Google Drive REST API v3
+// Storage: per-chapter JSON files (GEN-1.json ... REV-22.json) in app folder
+// Merge: per-verse first-come-first-served (never overwrites existing verses)
+const DRIVE_CLIENT_ID='644540414434-hp9dh8bdimelfgtgvh0pqrdv6sh5gvm6.apps.googleusercontent.com';
+const DRIVE_SCOPE='https://www.googleapis.com/auth/drive.file';
+const DRIVE_REDIRECT=location.origin+location.pathname;
+const DRIVE_FOLDER_NAME='japanese-bible-cache';
+let _driveToken=null,_driveFolderId=null,_driveSyncing=false;
+
+function driveInit(){
+  // 1. Check URL hash for OAuth callback
+  const hash=location.hash;
+  if(hash.includes('access_token=')){
+    const params=new URLSearchParams(hash.slice(1));
+    const token=params.get('access_token');
+    const expiresIn=parseInt(params.get('expires_in'))||3600;
+    if(token){
+      _driveToken=token;
+      const expiry=Date.now()+expiresIn*1000;
+      try{localStorage.setItem('bible-drive-token',token);localStorage.setItem('bible-drive-expiry',expiry+'');}catch(e){}
+      // Clean URL hash
+      history.replaceState(null,'',location.pathname+location.search);
+      showToast('☁️ Google Drive 已連接');
+      driveUpdateUI();
+      // Auto-sync after login
+      setTimeout(()=>driveFullSync(),500);
+    }
+    return;
+  }
+  // 2. Check for error in hash
+  if(hash.includes('error=')){
+    const params=new URLSearchParams(hash.slice(1));
+    const err=params.get('error');
+    history.replaceState(null,'',location.pathname+location.search);
+    if(err==='access_denied')showToast('❌ Google 授權被拒絕');
+    else showToast('❌ Google 登入失敗：'+err);
+    return;
+  }
+  // 3. Restore saved token
+  try{
+    const savedToken=localStorage.getItem('bible-drive-token');
+    const savedExpiry=parseInt(localStorage.getItem('bible-drive-expiry')||'0');
+    if(savedToken&&savedExpiry>Date.now()+60000){
+      _driveToken=savedToken;
+      driveUpdateUI();
+      // Auto-sync on app load (background, non-blocking)
+      setTimeout(()=>driveFullSync(),1500);
+    }
+  }catch(e){}
+}
+
+function driveLogin(){
+  const params=new URLSearchParams({
+    client_id:DRIVE_CLIENT_ID,
+    redirect_uri:DRIVE_REDIRECT,
+    response_type:'token',
+    scope:DRIVE_SCOPE,
+    include_granted_scopes:'true',
+    prompt:'consent'
+  });
+  location.href='https://accounts.google.com/o/oauth2/v2/auth?'+params.toString();
+}
+
+function driveLogout(){
+  _driveToken=null;_driveFolderId=null;
+  try{localStorage.removeItem('bible-drive-token');localStorage.removeItem('bible-drive-expiry');localStorage.removeItem('bible-drive-folder');}catch(e){}
+  driveUpdateUI();showToast('🚪 已登出 Google Drive');
+}
+
+function driveUpdateUI(){
+  const loginBtn=document.getElementById('drive-login-btn');
+  const syncBtn=document.getElementById('drive-sync-btn');
+  const logoutBtn=document.getElementById('drive-logout-btn');
+  const statusEl=document.getElementById('drive-status');
+  if(!loginBtn)return;
+  if(_driveToken){
+    loginBtn.style.display='none';
+    syncBtn.disabled=false;
+    logoutBtn.style.display='block';
+    if(statusEl)statusEl.textContent='✅ 已連接 Google Drive';
+  }else{
+    loginBtn.style.display='';
+    syncBtn.disabled=true;
+    logoutBtn.style.display='none';
+    if(statusEl)statusEl.textContent='未連接';
+  }
+}
+
+async function driveFetch(url,opts){
+  if(!_driveToken)throw new Error('NOT_LOGGED_IN');
+  opts=opts||{};opts.headers=opts.headers||{};
+  opts.headers['Authorization']='Bearer '+_driveToken;
+  const res=await fetch(url,opts);
+  if(res.status===401){
+    // Token expired
+    _driveToken=null;
+    try{localStorage.removeItem('bible-drive-token');}catch(e){}
+    driveUpdateUI();
+    throw new Error('TOKEN_EXPIRED');
+  }
+  return res;
+}
+
+async function driveGetOrCreateFolder(){
+  if(_driveFolderId)return _driveFolderId;
+  // Check localStorage cache
+  try{const cached=localStorage.getItem('bible-drive-folder');if(cached){_driveFolderId=cached;return cached;}}catch(e){}
+  // Search for existing folder
+  const q=encodeURIComponent("mimeType='application/vnd.google-apps.folder' and name='"+DRIVE_FOLDER_NAME+"' and trashed=false");
+  const res=await driveFetch('https://www.googleapis.com/drive/v3/files?q='+q+'&fields=files(id,name)&spaces=drive');
+  const data=await res.json();
+  if(data.files&&data.files.length>0){
+    _driveFolderId=data.files[0].id;
+    try{localStorage.setItem('bible-drive-folder',_driveFolderId);}catch(e){}
+    return _driveFolderId;
+  }
+  // Create folder
+  const createRes=await driveFetch('https://www.googleapis.com/drive/v3/files',{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({name:DRIVE_FOLDER_NAME,mimeType:'application/vnd.google-apps.folder'})
+  });
+  const folder=await createRes.json();
+  _driveFolderId=folder.id;
+  try{localStorage.setItem('bible-drive-folder',_driveFolderId);}catch(e){}
+  return _driveFolderId;
+}
+
+async function driveListFiles(){
+  const folderId=await driveGetOrCreateFolder();
+  let allFiles=[],pageToken='';
+  do{
+    const url='https://www.googleapis.com/drive/v3/files?q='+encodeURIComponent("'"+folderId+"' in parents and trashed=false")
+      +'&fields=files(id,name)&pageSize=1000'+(pageToken?'&pageToken='+pageToken:'');
+    const res=await driveFetch(url);
+    const data=await res.json();
+    if(data.files)allFiles=allFiles.concat(data.files);
+    pageToken=data.nextPageToken||'';
+  }while(pageToken);
+  return allFiles;// [{id,name}]
+}
+
+async function driveDownloadFile(fileId){
+  const res=await driveFetch('https://www.googleapis.com/drive/v3/files/'+fileId+'?alt=media');
+  return await res.json();
+}
+
+async function driveUploadFile(fileName,jsonData,existingFileId){
+  const folderId=await driveGetOrCreateFolder();
+  const metadata={name:fileName};
+  if(!existingFileId)metadata.parents=[folderId];
+  const body=JSON.stringify(jsonData);
+  const boundary='----BibleDrive'+Date.now();
+  const multipart='--'+boundary+'\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n'
+    +JSON.stringify(metadata)+'\r\n--'+boundary+'\r\nContent-Type: application/json\r\n\r\n'
+    +body+'\r\n--'+boundary+'--';
+  const url=existingFileId
+    ?'https://www.googleapis.com/upload/drive/v3/files/'+existingFileId+'?uploadType=multipart'
+    :'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
+  const res=await driveFetch(url,{
+    method:existingFileId?'PATCH':'POST',
+    headers:{'Content-Type':'multipart/related; boundary='+boundary},
+    body:multipart
+  });
+  return await res.json();
+}
+
+// Group local bg-* keys by chapter → {book-chapter: {verseNum: data}}
+function driveGroupLocalByChapter(){
+  const chapters={};
+  const keys=Object.keys(localStorage).filter(k=>k.startsWith('bg-'));
+  keys.forEach(k=>{
+    const parts=k.slice(3).split('-');// [BOOK, CHAPTER, VERSE]
+    if(parts.length<3)return;
+    const chKey=parts[0]+'-'+parts[1];
+    if(!chapters[chKey])chapters[chKey]={};
+    try{chapters[chKey][parts[2]]=JSON.parse(localStorage.getItem(k));}catch(e){}
+  });
+  return chapters;
+}
+
+// Full sync: download from Drive what we don't have, upload what Drive doesn't have
+async function driveFullSync(){
+  if(!_driveToken||_driveSyncing)return;
+  _driveSyncing=true;
+  const statusEl=document.getElementById('drive-status');
+  const syncBtn=document.getElementById('drive-sync-btn');
+  if(syncBtn)syncBtn.disabled=true;
+  try{
+    if(statusEl)statusEl.textContent='☁️ 連線中…';
+    const driveFiles=await driveListFiles();
+    const driveMap=new Map(driveFiles.map(f=>[f.name,f.id]));// name→id
+    const localChapters=driveGroupLocalByChapter();
+    let downloaded=0,uploaded=0,merged=0;
+
+    // 1. Download: Drive has, local doesn't (or partial)
+    if(statusEl)statusEl.textContent='☁️ 下載中… ('+driveFiles.length+' 章)';
+    for(const file of driveFiles){
+      const chKey=file.name.replace('.json','');// e.g. GEN-1
+      const parts=chKey.split('-');if(parts.length<2)continue;
+      const book=parts[0],chapter=parts[1];
+      try{
+        const driveData=await driveDownloadFile(file.id);
+        if(!driveData||typeof driveData!=='object')continue;
+        const verses=driveData.verses||driveData;
+        let newVerses=0;
+        Object.keys(verses).forEach(vNum=>{
+          const lsKey='bg-'+book+'-'+chapter+'-'+vNum;
+          if(!localStorage.getItem(lsKey)){
+            try{localStorage.setItem(lsKey,typeof verses[vNum]==='string'?verses[vNum]:JSON.stringify(verses[vNum]));newVerses++;}catch(e){}
+          }
+        });
+        if(newVerses>0)downloaded+=newVerses;
+      }catch(e){console.log('Drive download error:',chKey,e.message);}
+    }
+
+    // 2. Upload: local has, Drive doesn't (or local has more verses)
+    if(statusEl)statusEl.textContent='☁️ 上傳中…';
+    const localKeys=Object.keys(localChapters);
+    for(const chKey of localKeys){
+      const fileName=chKey+'.json';
+      const localVerses=localChapters[chKey];
+      const existingId=driveMap.get(fileName);
+      if(existingId){
+        // Merge: download, add missing verses, re-upload
+        try{
+          const driveData=await driveDownloadFile(existingId);
+          const driveVerses=(driveData&&driveData.verses)||driveData||{};
+          let hasNew=false;
+          Object.keys(localVerses).forEach(vNum=>{
+            if(!driveVerses[vNum]){driveVerses[vNum]=localVerses[vNum];hasNew=true;}
+          });
+          if(hasNew){
+            await driveUploadFile(fileName,{version:2,updatedAt:new Date().toISOString(),verses:driveVerses},existingId);
+            merged++;
+          }
+        }catch(e){console.log('Drive merge error:',chKey,e.message);}
+      }else{
+        // New file
+        try{
+          await driveUploadFile(fileName,{version:2,updatedAt:new Date().toISOString(),verses:localVerses});
+          uploaded++;
+        }catch(e){console.log('Drive upload error:',chKey,e.message);}
+      }
+    }
+
+    const msg=[];
+    if(downloaded)msg.push('⬇️'+downloaded+'節');
+    if(uploaded)msg.push('⬆️'+uploaded+'章');
+    if(merged)msg.push('🔄'+merged+'章合併');
+    if(msg.length)showToast('☁️ 同步完成：'+msg.join(' '));
+    else showToast('☁️ 雲端已是最新');
+    if(statusEl)statusEl.textContent='✅ 已同步（'+driveFiles.length+'章在雲端）';
+    if(downloaded)renderVersePills();// refresh green borders
+  }catch(e){
+    const msg=e.message||'';
+    if(msg==='TOKEN_EXPIRED')showToast('🔑 登入已過期，請重新登入');
+    else if(msg==='NOT_LOGGED_IN')showToast('請先登入 Google Drive');
+    else showToast('☁️ 同步失敗：'+msg.slice(0,30));
+    if(statusEl)statusEl.textContent='❌ 同步失敗';
+  }finally{
+    _driveSyncing=false;
+    if(syncBtn)syncBtn.disabled=false;
+  }
+}
+
+// Upload a single verse to Drive (called after Gemini returns new data)
+async function driveUploadVerse(book,chapter,verse,unitData){
+  if(!_driveToken)return;// silently skip if not logged in
+  const chKey=book+'-'+chapter;
+  const fileName=chKey+'.json';
+  try{
+    const folderId=await driveGetOrCreateFolder();
+    // Find existing file
+    const q=encodeURIComponent("name='"+fileName+"' and '"+folderId+"' in parents and trashed=false");
+    const res=await driveFetch('https://www.googleapis.com/drive/v3/files?q='+q+'&fields=files(id)');
+    const data=await res.json();
+    const existingId=(data.files&&data.files[0])?data.files[0].id:null;
+    if(existingId){
+      // Download, merge, re-upload
+      const driveData=await driveDownloadFile(existingId);
+      const driveVerses=(driveData&&driveData.verses)||driveData||{};
+      if(!driveVerses[verse+''])driveVerses[verse+'']=unitData;// first-come-first-served
+      await driveUploadFile(fileName,{version:2,updatedAt:new Date().toISOString(),verses:driveVerses},existingId);
+    }else{
+      // Create new
+      const verses={};verses[verse+'']=unitData;
+      await driveUploadFile(fileName,{version:2,updatedAt:new Date().toISOString(),verses:verses});
+    }
+  }catch(e){console.log('driveUploadVerse:',e.message);}
+}
+
 // ═══ INIT ═══
 window.addEventListener('load',()=>{
   try{GEMINI_KEY=localStorage.getItem('bible-gemini-key')||'';}catch(e){}
@@ -982,6 +1288,8 @@ window.addEventListener('load',()=>{
   if(bookExists)sel.value=curBook;
   onBookChange(false);
   window.addEventListener('resize',()=>initCanvas());
+  // Google Drive: check for OAuth callback or restore session, then auto-sync
+  driveInit();
 });
 if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(()=>{});}
 </script>
