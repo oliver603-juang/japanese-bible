@@ -20,6 +20,10 @@ body{font-family:'Noto Sans TC','M PLUS Rounded 1c',sans-serif;background:var(--
 .top-bar{display:flex;align-items:center;padding:6px 12px;gap:6px;flex-shrink:0;}
 .app-logo{font-size:0.85rem;font-weight:900;color:var(--gold);flex:1;}
 .gear-btn{width:28px;height:28px;border:none;border-radius:50%;background:var(--surface);color:var(--text-dim);font-size:0.85rem;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+.api-badge{font-size:0.5rem;color:var(--text-muted);background:var(--surface);padding:2px 7px;border-radius:10px;white-space:nowrap;cursor:pointer;border:1px solid var(--border);transition:all 0.3s;line-height:1.3;text-align:center;}
+.api-badge.ok{color:var(--tile-noun);border-color:rgba(143,168,139,0.4);}
+.api-badge.warn{color:var(--gold);border-color:rgba(201,184,140,0.4);}
+.api-badge.err{color:var(--accent);border-color:rgba(196,135,122,0.4);}
 .nav-row{display:flex;gap:4px;padding:2px 12px 4px;flex-shrink:0;align-items:center;}
 .nav-select{padding:3px 6px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text);font-size:0.6rem;font-family:inherit;outline:none;max-width:35%;}
 .testament-btn{padding:4px 8px;border:none;font-size:0.6rem;font-weight:700;cursor:pointer;font-family:inherit;}
@@ -185,6 +189,7 @@ body{font-family:'Noto Sans TC','M PLUS Rounded 1c',sans-serif;background:var(--
 </div></div>
 <div class="top-bar">
 <div class="app-logo">✝️ 日文聖經特訓班</div>
+<div class="api-badge" id="api-badge" onclick="showApiStatus()" title="API 配額狀態">—</div>
 <button class="gear-btn" onclick="openSettings()">⚙️</button>
 </div>
 <div class="nav-row">
@@ -505,6 +510,7 @@ async function callGemini(body,opts){
         });
         if(res.ok){
           if(model!==GEMINI_MODEL){GEMINI_MODEL=model;try{localStorage.setItem('bible-gemini-model',model);}catch(e){}showToast('🔄 已切換到 '+model);}
+          apiTrackCall(true);
           return await res.json();
         }
         const errData=await res.json().catch(()=>({error:{code:res.status,message:res.statusText}}));
@@ -519,8 +525,8 @@ async function callGemini(body,opts){
           await new Promise(r=>setTimeout(r,waitMs));continue;
         }
         if(code===404||status==='NOT_FOUND'||status==='UNAVAILABLE'){lastErr=new Error('MODEL_'+code+'_'+model);break;}// try next model
-        if(code===429){lastErr=new Error('QUOTA');break;}// final attempt failed → don't try other models, same quota
-        if(code===400&&errData?.error?.message?.includes('API key')){throw new Error('BAD_KEY');}
+        if(code===429){lastErr=new Error('QUOTA');apiTrackCall(false,'QUOTA');break;}// final attempt failed → don't try other models, same quota
+        if(code===400&&errData?.error?.message?.includes('API key')){apiTrackCall(false,'BAD_KEY');throw new Error('BAD_KEY');}
         throw new Error('API_'+code+': '+(errData?.error?.message||'unknown').slice(0,80));
       }catch(e){
         if(e.message==='BAD_KEY'||e.message==='QUOTA')throw e;
@@ -987,6 +993,59 @@ function updateProgress(){const t=chapterVerses.length;document.getElementById('
 function showScorePopup(p,d){document.querySelector('.score-popup')?.remove();const div=document.createElement('div');div.className='score-popup show';div.innerHTML='<div class="score-val">+'+p+'</div><div class="score-desc">'+d+'</div>';document.body.appendChild(div);}
 function showToast(m){const d=document.createElement('div');d.className='ocr-toast';d.textContent=m;document.body.appendChild(d);setTimeout(()=>d.remove(),2500);}
 
+// ═══ API QUOTA TRACKER ═══
+// Tracks Gemini API calls per minute and overall status
+const _apiLog=[];// timestamps of recent calls
+let _apiStatus='idle';// idle|ok|warn|err|quota
+let _apiLastError='';
+let _apiTotalCalls=0;
+
+function apiTrackCall(success,errorMsg){
+  _apiLog.push(Date.now());
+  _apiTotalCalls++;
+  // Keep only last 2 minutes of data
+  const cutoff=Date.now()-120000;
+  while(_apiLog.length&&_apiLog[0]<cutoff)_apiLog.shift();
+  if(success){_apiStatus='ok';_apiLastError='';}
+  else{_apiStatus=errorMsg==='QUOTA'?'quota':'err';_apiLastError=errorMsg||'error';}
+  apiUpdateBadge();
+}
+
+function apiGetRPM(){
+  const cutoff=Date.now()-60000;
+  return _apiLog.filter(t=>t>=cutoff).length;
+}
+
+function apiUpdateBadge(){
+  const el=document.getElementById('api-badge');if(!el)return;
+  const rpm=apiGetRPM();
+  if(_apiStatus==='quota'){
+    el.textContent='⏳ 配額滿';el.className='api-badge err';
+  }else if(_apiStatus==='err'){
+    el.textContent='❌ 錯誤';el.className='api-badge err';
+  }else if(rpm>0){
+    el.textContent=rpm+'/min';
+    el.className='api-badge '+(rpm>=12?'warn':'ok');
+  }else if(_apiTotalCalls>0){
+    el.textContent='✓ 就緒';el.className='api-badge ok';
+  }else if(GEMINI_KEY){
+    el.textContent='✓ 就緒';el.className='api-badge ok';
+  }else{
+    el.textContent='無 Key';el.className='api-badge';
+  }
+}
+
+function showApiStatus(){
+  const rpm=apiGetRPM();
+  const lines=['📊 API 配額狀態','','模型：'+GEMINI_MODEL,'本次呼叫：'+_apiTotalCalls+' 次','近 1 分鐘：'+rpm+' 次',
+    '狀態：'+({idle:'待機',ok:'✅ 正常',warn:'⚠️ 接近上限',err:'❌ '+_apiLastError,quota:'⏳ 配額用完'}[_apiStatus]||_apiStatus),
+    '','Gemini 免費額度：15 RPM / 1500 RPD','（每日台灣時間 16:00 重置）'];
+  alert(lines.join('\n'));
+}
+
+// Refresh badge every 10 seconds to update RPM countdown
+setInterval(apiUpdateBadge,10000);
+
 // ═══ GOOGLE DRIVE SYNC ENGINE ═══
 // OAuth 2.0 Implicit Grant + Google Drive REST API v3
 // Storage: per-chapter JSON files (GEN-1.json ... REV-22.json) in app folder
@@ -1282,6 +1341,7 @@ async function driveUploadVerse(book,chapter,verse,unitData){
 // ═══ INIT ═══
 window.addEventListener('load',()=>{
   try{GEMINI_KEY=localStorage.getItem('bible-gemini-key')||'';}catch(e){}
+  apiUpdateBadge();
   loadProgress();switchTestament(curTestament);
   const sel=document.getElementById('book-select');
   const bookExists=[...sel.options].some(o=>o.value===curBook);
