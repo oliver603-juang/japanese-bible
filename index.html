@@ -76,6 +76,17 @@ body{font-family:'Noto Sans TC','M PLUS Rounded 1c',sans-serif;background:var(--
 .gm .gm-body{font-size:0.82rem;color:var(--text);line-height:1.8;padding:14px;background:var(--surface);border-radius:12px;margin-bottom:10px;text-align:left;}
 .gm .gm-body b{color:var(--gold);}
 .gm .gm-close{padding:8px 24px;border:none;border-radius:16px;background:var(--gold);color:var(--bg);font-family:inherit;font-size:0.9rem;font-weight:600;cursor:pointer;}
+.sa-section{margin-bottom:12px;padding:10px 12px;border-radius:10px;background:rgba(103,58,183,0.05);border-left:3px solid rgba(103,58,183,0.3);}
+.sa-section h4{font-size:0.8rem;margin-bottom:4px;color:#673AB7;}
+.sa-formula{font-family:monospace;font-size:0.75rem;background:rgba(33,150,243,0.08);padding:8px 12px;border-radius:8px;margin:8px 0;line-height:1.6;color:#1565C0;text-align:center;}
+.sa-block{display:inline-block;padding:2px 8px;border-radius:6px;margin:2px;font-size:0.72rem;font-weight:600;}
+.sa-block.noun{background:#E8F5E9;color:#2E7D32;}.sa-block.particle{background:#FFEBEE;color:#C62828;}.sa-block.verb{background:#E3F2FD;color:#1565C0;}.sa-block.other{background:#FFF3E0;color:#E65100;}
+.sa-compare{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:6px 0;}
+.sa-compare div{padding:6px 8px;border-radius:8px;font-size:0.72rem;line-height:1.5;}
+.sa-compare .sa-cn{background:rgba(255,152,0,0.08);border:1px solid rgba(255,152,0,0.2);}
+.sa-compare .sa-jp{background:rgba(103,58,183,0.08);border:1px solid rgba(103,58,183,0.2);}
+.sa-insight{font-size:0.72rem;color:#555;line-height:1.6;padding:6px 0;}
+.sa-insight b{color:#673AB7;}
 .score-popup{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) scale(0);background:var(--surface);border:2px solid var(--gold);padding:20px 30px;border-radius:20px;text-align:center;z-index:20000;}
 .score-popup.show{animation:popScale 0.5s forwards;}
 @keyframes popScale{0%{transform:translate(-50%,-50%) scale(0)}80%{transform:translate(-50%,-50%) scale(1.08)}100%{transform:translate(-50%,-50%) scale(1)}}
@@ -192,6 +203,15 @@ body{font-family:'Noto Sans TC','M PLUS Rounded 1c',sans-serif;background:var(--
 <div class="gm-body" id="bm-body"></div>
 <div style="text-align:center;"><button class="gm-close" onclick="document.getElementById('bonus-modal').classList.remove('open')">知道了！</button></div>
 </div></div>
+<div class="modal-overlay" id="structure-modal"><div class="gm" style="max-width:460px;">
+<div class="gm-title" id="sm-title" style="font-size:0.95rem;">🔬 構句解析</div>
+<div class="gm-body" id="sm-body" style="font-size:0.78rem;line-height:1.7;user-select:text;-webkit-user-select:text;"></div>
+<div style="display:flex;gap:8px;justify-content:center;">
+<button class="gm-close" style="background:rgba(103,58,183,0.1);color:#673AB7;font-size:0.7rem;" onclick="readStructureAnalysis()">🔊 唸給我聽</button>
+<button class="gm-close" style="background:rgba(33,150,243,0.1);color:#2196F3;font-size:0.7rem;" onclick="shareStructureAnalysis()">📤 分享</button>
+<button class="gm-close" onclick="document.getElementById('structure-modal').classList.remove('open');synth.cancel();">知道了！</button>
+</div>
+</div></div>
 <div class="top-bar">
 <div class="app-logo">✝️ 日文聖經特訓班</div>
 <div class="api-badge" id="api-badge" onclick="showApiStatus()" title="API 配額狀態">—</div>
@@ -224,6 +244,10 @@ body{font-family:'Noto Sans TC','M PLUS Rounded 1c',sans-serif;background:var(--
 <div class="tile t-bonus" onclick="openBonusModal()">
 <div style="font-size:0.55rem;color:var(--text-dim);">📚 延伸學習</div>
 <div style="font-size:0.7rem;color:var(--text);font-weight:700;margin-top:2px;" id="bonus-title">選擇經文開始</div>
+</div>
+<div class="tile t-bonus" onclick="openStructureModal()" style="background:linear-gradient(135deg,rgba(103,58,183,0.08),rgba(33,150,243,0.08));">
+<div style="font-size:0.55rem;color:var(--text-dim);">🔬 構句解析</div>
+<div style="font-size:0.7rem;color:var(--text);font-weight:700;margin-top:2px;" id="structure-title">中日思維對比</div>
 </div></div>
 <div class="bottom-bar">
 <div class="progress-label" id="progress-label">—</div>
@@ -1073,6 +1097,154 @@ async function openBonusModal(){
     showToast('📖 延伸學習已儲存');
   }else{
     document.getElementById('bm-body').innerHTML='<p style="color:var(--accent);">生成失敗，請稍後再試</p>';
+  }
+}
+
+// ═══ 構句解析 Modal ═══
+let _structureCache = {};
+const STRUCTURE_PROMPT = `你是精通中日雙語的語言學導師。請針對以下日文聖經經文，進行「中日構句思維對比」解說。
+
+用繁體中文（台灣慣用語）回答。輸出純 JSON，無 markdown。
+
+JSON 結構：
+{
+  "title": "經文主題（如「創造的宣告」）",
+  "formula": "日文公式（用 [名詞+助詞]+[名詞+助詞]+[動詞] 格式）",
+  "blocks": [{"text":"日文片段","type":"noun|particle|verb|other","role":"中文角色說明（如「主角」「受詞標記」「動作核心」）"}],
+  "insights": [
+    {"title":"觀念名稱（如「助詞＝導航系統」）","icon":"emoji","body":"解說（50字內，用積木/雙面膠/GPS等比喻，像跟小朋友聊天）"},
+    {"title":"第二個觀念","icon":"emoji","body":"解說"},
+    {"title":"第三個觀念","icon":"emoji","body":"解說"}
+  ],
+  "compare": {"cn":"中文語序（如「神 創造 天地」）","jp":"日文語序（如「神は 天と地を 創造された」）","diff":"一句話說明差異"},
+  "summary": "一句話總結日文構句邏輯（20字內）"
+}
+
+規則：
+- insights 必須有 3 個，聚焦在中文使用者最缺的觀念（助詞、語序SOV、敬語/時態）
+- blocks 要對應 formula 的每個零件
+- compare 的 cn 和 jp 要能讓讀者一眼看出語序差異
+- 比喻要生動、口語、有畫面感`;
+
+async function openStructureModal() {
+  if (!currentUnit?.fullSentence) { showToast('請先選擇經文'); return; }
+  if (!GEMINI_KEY) { showToast('請先設定 Gemini API Key ⚙️'); return; }
+
+  const sentence = currentUnit.fullSentence;
+  const cacheKey = 'sa-' + sentence;
+
+  // Check cache
+  if (_structureCache[cacheKey]) {
+    renderStructureModal(_structureCache[cacheKey]);
+    return;
+  }
+
+  // Also check localStorage
+  try {
+    const saved = localStorage.getItem(cacheKey);
+    if (saved) {
+      const data = JSON.parse(saved);
+      _structureCache[cacheKey] = data;
+      renderStructureModal(data);
+      return;
+    }
+  } catch(e) {}
+
+  // Show loading
+  document.getElementById('sm-title').textContent = '🔬 構句解析';
+  document.getElementById('sm-body').innerHTML = '<p style="color:var(--text-dim);text-align:center;padding:20px;">🧠 AI 正在分析構句邏輯…<br><span style="font-size:0.65rem;">比對中日文思維差異中</span></p>';
+  document.getElementById('structure-modal').classList.add('open');
+
+  try {
+    const data = await callGemini({
+      contents: [{ parts: [{ text: '經文：' + sentence + '\n翻譯：' + (currentUnit.translation || '') }] }],
+      systemInstruction: { parts: [{ text: STRUCTURE_PROMPT }] },
+      generationConfig: { responseMimeType: 'application/json' }
+    }, { maxRetry: 2 });
+
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (text) {
+      let parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
+      if (Array.isArray(parsed)) parsed = parsed[0];
+      _structureCache[cacheKey] = parsed;
+      try { localStorage.setItem(cacheKey, JSON.stringify(parsed)); } catch(e) {}
+      renderStructureModal(parsed);
+    } else {
+      document.getElementById('sm-body').innerHTML = '<p style="color:var(--accent);">分析失敗，請稍後再試</p>';
+    }
+  } catch(e) {
+    document.getElementById('sm-body').innerHTML = '<p style="color:var(--accent);">分析失敗：' + e.message + '</p>';
+  }
+}
+
+function renderStructureModal(data) {
+  document.getElementById('sm-title').textContent = '🔬 ' + (data.title || '構句解析');
+  let html = '';
+
+  // Formula
+  if (data.formula) {
+    html += '<div class="sa-formula">' + data.formula + '</div>';
+  }
+
+  // Blocks (colored building blocks)
+  if (data.blocks?.length) {
+    html += '<div style="margin:8px 0;text-align:center;">';
+    data.blocks.forEach(b => {
+      const cls = b.type === 'noun' ? 'noun' : b.type === 'particle' ? 'particle' : b.type === 'verb' ? 'verb' : 'other';
+      html += '<span class="sa-block ' + cls + '" title="' + (b.role || '') + '">' + b.text + '<br><span style="font-size:0.55rem;font-weight:400;opacity:0.7;">' + (b.role || '') + '</span></span>';
+    });
+    html += '</div>';
+  }
+
+  // Chinese vs Japanese comparison
+  if (data.compare) {
+    html += '<div class="sa-compare">';
+    html += '<div class="sa-cn"><b>🇹🇼 中文</b><br>' + data.compare.cn + '</div>';
+    html += '<div class="sa-jp"><b>🇯🇵 日文</b><br>' + data.compare.jp + '</div>';
+    html += '</div>';
+    if (data.compare.diff) {
+      html += '<div style="font-size:0.68rem;color:#888;text-align:center;margin:4px 0;">💡 ' + data.compare.diff + '</div>';
+    }
+  }
+
+  // Insights (3 core concepts)
+  if (data.insights?.length) {
+    data.insights.forEach(ins => {
+      html += '<div class="sa-section"><h4>' + (ins.icon || '💡') + ' ' + ins.title + '</h4>';
+      html += '<div class="sa-insight">' + ins.body + '</div></div>';
+    });
+  }
+
+  // Summary
+  if (data.summary) {
+    html += '<div style="text-align:center;padding:8px;margin-top:8px;background:rgba(103,58,183,0.06);border-radius:10px;font-size:0.8rem;font-weight:600;color:#673AB7;">📐 ' + data.summary + '</div>';
+  }
+
+  document.getElementById('sm-body').innerHTML = html;
+  document.getElementById('structure-modal').classList.add('open');
+}
+
+function readStructureAnalysis() {
+  const body = document.getElementById('sm-body');
+  if (!body) return;
+  const text = body.innerText;
+  if (text) {
+    synth.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'zh-TW'; u.rate = 0.9;
+    synth.speak(u);
+  }
+}
+
+function shareStructureAnalysis() {
+  const body = document.getElementById('sm-body');
+  const title = document.getElementById('sm-title');
+  if (!body) return;
+  const text = (title?.textContent || '') + '\n\n' + body.innerText;
+  if (navigator.share) {
+    navigator.share({ title: title?.textContent, text }).catch(() => {});
+  } else if (navigator.clipboard) {
+    navigator.clipboard.writeText(text).then(() => showToast('✅ 已複製到剪貼簿！'));
   }
 }
 
