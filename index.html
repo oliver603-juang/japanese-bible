@@ -163,6 +163,8 @@ body{font-family:'Noto Sans TC','M PLUS Rounded 1c',sans-serif;background:var(--
 <button class="modal-btn cancel" onclick="resetProgress()" style="flex:1;text-align:center;font-size:0.7rem;">🗑️ 重設進度</button>
 </div>
 <div style="margin-top:6px;"><button class="modal-btn cancel" onclick="clearGrammarCache()" style="width:100%;text-align:center;font-size:0.7rem;">🧹 清除文法快取 (<span id="cache-count">0</span> 筆)</button></div>
+<div style="margin-top:6px;"><button class="modal-btn cancel" onclick="closeSettings();startBatchAnalysis();" style="width:100%;text-align:center;font-size:0.7rem;background:rgba(103,58,183,0.1);color:#673AB7;">🔬 背景批次分析（文法＋構句＋延伸）</button></div>
+<div style="font-size:0.55rem;color:var(--text-muted);margin-top:3px;">自動逐節補齊所有經文的 AI 分析。限速 10RPM，每日 700 次。可隨時暫停/繼續。</div>
 </div>
 <div style="padding:10px;background:rgba(255,255,255,0.03);border-radius:10px;border:1px solid var(--border);margin-bottom:14px;">
 <label>📊 掌握進度</label>
@@ -1247,6 +1249,253 @@ function shareStructureAnalysis() {
     navigator.clipboard.writeText(text).then(() => showToast('✅ 已複製到剪貼簿！'));
   }
 }
+
+// ═══ 背景批次分析引擎 ═══
+// 自動逐節補齊文法分析 + 構句解析，存入 localStorage + Google Drive
+let _batch = { running: false, paused: false, done: 0, total: 0, errors: 0, daily: 0 };
+const BATCH_INTERVAL = 6500; // ~9 RPM，安全低於 Tier 1
+const BATCH_DAILY_LIMIT = 700; // 留 800 給前景互動
+
+// 合併 prompt：一次取得 文法分析 + 延伸學習 + 構句解析
+const COMBINED_PROMPT = GRAMMAR_PROMPT + `
+
+【額外必填欄位：構句解析 structureAnalysis】
+在 JSON 最外層加入 "structureAnalysis" 欄位，結構如下：
+{
+  "structureAnalysis":{
+    "title":"經文構句主題（如「創造的宣告」）",
+    "formula":"[名詞+助詞]+[名詞+助詞]+[動詞] 日文公式",
+    "blocks":[{"text":"日文片段","type":"noun|particle|verb|other","role":"中文角色說明（如主角/受詞標記/動作核心）"}],
+    "insights":[
+      {"title":"觀念名稱","icon":"emoji","body":"解說（50字內，用積木/雙面膠比喻）"},
+      {"title":"第二觀念","icon":"emoji","body":"解說"},
+      {"title":"第三觀念","icon":"emoji","body":"解說"}
+    ],
+    "compare":{"cn":"中文語序","jp":"日文語序","diff":"一句話差異"},
+    "summary":"一句話總結構句邏輯（20字內）"
+  }
+}
+- insights 必須 3 個，聚焦助詞/語序SOV/時態敬語
+- blocks 對應 formula 每個零件
+- compare 讓讀者一眼看出 SVO vs SOV 差異`;
+
+function startBatchAnalysis() {
+  if (_batch.running) { showToast('背景分析已在執行中'); return; }
+  if (!GEMINI_KEY) { showToast('請先設定 Gemini API Key ⚙️'); return; }
+  _batch.running = true;
+  _batch.paused = false;
+  _batch.daily = 0;
+  showToast('🔄 背景批次分析已啟動');
+  console.log('🔄 批次分析開始');
+  runBatchLoop();
+}
+
+function stopBatchAnalysis() {
+  _batch.paused = true;
+  showToast('⏸️ 背景分析已暫停');
+}
+
+async function runBatchLoop() {
+  const allBooks = [...ALL_BOOKS.OT, ...ALL_BOOKS.NT];
+  
+  // 從上次停下的位置繼續
+  let startBook = 0, startChapter = 1, startVerse = 1;
+  try {
+    const saved = localStorage.getItem('batch-progress');
+    if (saved) {
+      const p = JSON.parse(saved);
+      startBook = p.bookIdx || 0;
+      startChapter = p.chapter || 1;
+      startVerse = p.verse || 1;
+    }
+  } catch(e) {}
+
+  let consecutiveErrors = 0;
+  
+  for (let bi = startBook; bi < allBooks.length && !_batch.paused; bi++) {
+    const book = allBooks[bi];
+    const startCh = (bi === startBook) ? startChapter : 1;
+    
+    for (let ch = startCh; ch <= book.ch && !_batch.paused; ch++) {
+      // 先知道這章有幾節（用估計值，大部分章節 20-40 節）
+      const maxVerse = 176; // 詩篇 119 最多 176 節
+      const startV = (bi === startBook && ch === startChapter) ? startVerse : 1;
+      
+      for (let v = startV; v <= maxVerse && !_batch.paused; v++) {
+        // 檢查每日限額
+        if (_batch.daily >= BATCH_DAILY_LIMIT) {
+          console.log('📊 今日批次額度用完 (' + _batch.daily + ')，明天繼續');
+          _batch.paused = true;
+          saveBatchProgress(bi, ch, v);
+          updateBatchBadge();
+          break;
+        }
+
+        const bgKey = 'bg-' + book.id + '-' + ch + '-' + v;
+        const saKey = 'sa-' + book.id + '-' + ch + '-' + v;
+        
+        // 判斷需要什麼
+        const hasBg = !!localStorage.getItem(bgKey);
+        const hasSa = !!localStorage.getItem(saKey);
+        
+        if (hasBg && hasSa) continue; // 都有了，跳過
+        
+        // 確定要呼叫的 prompt
+        const bookName = book.name;
+        const versePrompt = '請查詢日文聖經（口語訳）' + bookName + ' 第' + ch + '章 第' + v + '節，並進行文法分析。';
+        
+        try {
+          let result;
+          
+          if (!hasBg) {
+            // 情境 B：兩者都缺（或只缺文法）→ 用合併 prompt
+            const data = await callGemini({
+              contents: [{ parts: [{ text: COMBINED_PROMPT + '\n\n【經文】\n' + versePrompt }] }],
+              generationConfig: { responseMimeType: 'application/json' }
+            }, { maxRetry: 1 });
+            
+            const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (!text) { v = maxVerse + 1; continue; } // 可能該章沒這麼多節
+            
+            result = JSON.parse(text.replace(/```json|```/g, '').trim());
+            if (Array.isArray(result)) result = result[0];
+            
+            // 存文法分析
+            result.fullTts = result.chunks?.map(c => c.tts || c.text).join('') || '';
+            result.book = book.id; result.chapter = ch; result.verse = v;
+            localStorage.setItem(bgKey, JSON.stringify(result));
+            
+            // 存構句解析
+            if (result.structureAnalysis) {
+              localStorage.setItem(saKey, JSON.stringify(result.structureAnalysis));
+            }
+            
+            // Drive sync
+            if (typeof driveUploadVerse === 'function') {
+              driveUploadVerse(book.id, ch, v, result).catch(() => {});
+            }
+          } else {
+            // 情境 A：只缺構句解析
+            const bgData = JSON.parse(localStorage.getItem(bgKey));
+            const sentence = bgData?.fullSentence || '';
+            const translation = bgData?.translation || '';
+            
+            if (!sentence) continue;
+            
+            const data = await callGemini({
+              contents: [{ parts: [{ text: '經文：' + sentence + '\n翻譯：' + translation }] }],
+              systemInstruction: { parts: [{ text: STRUCTURE_PROMPT }] },
+              generationConfig: { responseMimeType: 'application/json' }
+            }, { maxRetry: 1 });
+            
+            const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (text) {
+              let parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
+              if (Array.isArray(parsed)) parsed = parsed[0];
+              localStorage.setItem(saKey, JSON.stringify(parsed));
+            }
+          }
+          
+          _batch.done++;
+          _batch.daily++;
+          consecutiveErrors = 0;
+          
+        } catch(e) {
+          if (e.message === 'QUOTA') {
+            console.log('⏳ 配額已滿，暫停批次分析');
+            _batch.paused = true;
+            saveBatchProgress(bi, ch, v);
+            break;
+          }
+          // 可能是該章沒這節了
+          if (e.message?.includes('API_4')) {
+            v = maxVerse + 1; // 跳到下一章
+            continue;
+          }
+          consecutiveErrors++;
+          _batch.errors++;
+          if (consecutiveErrors >= 5) {
+            v = maxVerse + 1; // 連續失敗 5 次，跳到下一章
+            consecutiveErrors = 0;
+          }
+        }
+        
+        updateBatchBadge();
+        saveBatchProgress(bi, ch, v + 1);
+        
+        // Rate limit
+        if (!_batch.paused) {
+          await new Promise(r => setTimeout(r, BATCH_INTERVAL));
+        }
+      }
+    }
+  }
+  
+  _batch.running = false;
+  updateBatchBadge();
+  if (!_batch.paused) {
+    console.log('✅ 批次分析全部完成！');
+    showToast('✅ 批次分析完成！');
+  }
+}
+
+function saveBatchProgress(bookIdx, chapter, verse) {
+  try {
+    localStorage.setItem('batch-progress', JSON.stringify({ bookIdx, chapter, verse }));
+  } catch(e) {}
+}
+
+function updateBatchBadge() {
+  const badge = document.getElementById('api-badge');
+  if (!badge || !_batch.running) return;
+  badge.textContent = '⏳' + _batch.done;
+  badge.title = '背景批次分析\n完成: ' + _batch.done + '\n今日: ' + _batch.daily + '/' + BATCH_DAILY_LIMIT + '\n錯誤: ' + _batch.errors + '\n點擊暫停/繼續';
+  badge.onclick = () => {
+    if (_batch.running && !_batch.paused) {
+      stopBatchAnalysis();
+    } else if (_batch.paused) {
+      _batch.paused = false;
+      _batch.running = true;
+      showToast('▶️ 繼續批次分析');
+      runBatchLoop();
+    } else {
+      showApiStatus();
+    }
+  };
+}
+
+// 在 loadVerse 取得構句解析時，也從 bg- 的 structureAnalysis 欄位讀取
+const _origOpenStructure = openStructureModal;
+openStructureModal = async function() {
+  if (!currentUnit?.fullSentence) { showToast('請先選擇經文'); return; }
+  
+  const sentence = currentUnit.fullSentence;
+  const cacheKey = 'sa-' + sentence;
+  
+  // 也嘗試從 bg- 快取中讀取 structureAnalysis
+  if (!localStorage.getItem(cacheKey)) {
+    const bgKey = 'bg-' + curBook + '-' + curChapter + '-' + curVerse;
+    try {
+      const bgData = JSON.parse(localStorage.getItem(bgKey) || '{}');
+      if (bgData.structureAnalysis) {
+        localStorage.setItem(cacheKey, JSON.stringify(bgData.structureAnalysis));
+        _structureCache[cacheKey] = bgData.structureAnalysis;
+      }
+    } catch(e) {}
+    
+    // 也嘗試用 verse-specific key
+    const saKey = 'sa-' + curBook + '-' + curChapter + '-' + curVerse;
+    try {
+      const saData = localStorage.getItem(saKey);
+      if (saData) {
+        _structureCache[cacheKey] = JSON.parse(saData);
+        localStorage.setItem(cacheKey, saData);
+      }
+    } catch(e) {}
+  }
+  
+  return _origOpenStructure();
+};
 
 // ═══ UI ═══
 function setLoading(on){document.getElementById('loading-bar').classList.toggle('active',on);}
