@@ -76,17 +76,26 @@ body{font-family:'Noto Sans TC','M PLUS Rounded 1c',sans-serif;background:var(--
 .gm .gm-body{font-size:0.82rem;color:var(--text);line-height:1.8;padding:14px;background:var(--surface);border-radius:12px;margin-bottom:10px;text-align:left;}
 .gm .gm-body b{color:var(--gold);}
 .gm .gm-close{padding:8px 24px;border:none;border-radius:16px;background:var(--gold);color:var(--bg);font-family:inherit;font-size:0.9rem;font-weight:600;cursor:pointer;}
-.sa-section{margin-bottom:12px;padding:12px 14px;border-radius:10px;background:rgba(255,255,255,0.04);border-left:3px solid rgba(179,157,219,0.4);border:1px solid rgba(255,255,255,0.07);border-left:3px solid rgba(179,157,219,0.4);}
-.sa-section h4{font-size:0.85rem;margin-bottom:6px;color:#D1C4E9;font-weight:600;}
-.sa-formula{font-family:monospace;font-size:0.82rem;background:rgba(33,150,243,0.1);padding:10px 14px;border-radius:8px;margin:8px 0;line-height:1.7;color:#90CAF9;text-align:center;border:1px solid rgba(100,181,246,0.15);}
-.sa-block{display:inline-block;padding:3px 10px;border-radius:8px;margin:3px;font-size:0.78rem;font-weight:600;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.05);}
-.sa-block.noun{background:rgba(129,199,132,0.12);color:#A5D6A7;border-color:rgba(129,199,132,0.25);}.sa-block.particle{background:rgba(239,154,154,0.12);color:#EF9A9A;border-color:rgba(239,154,154,0.25);}.sa-block.verb{background:rgba(100,181,246,0.12);color:#64B5F6;border-color:rgba(100,181,246,0.25);}.sa-block.other{background:rgba(255,183,77,0.12);color:#FFB74D;border-color:rgba(255,183,77,0.25);}
+.sa-section{margin-bottom:12px;padding:10px 12px;border-radius:10px;background:rgba(103,58,183,0.05);border-left:3px solid rgba(103,58,183,0.3);}
+.sa-section h4{font-size:0.8rem;margin-bottom:4px;color:#673AB7;}
+.sa-formula{font-family:monospace;font-size:0.75rem;background:rgba(33,150,243,0.08);padding:8px 12px;border-radius:8px;margin:8px 0;line-height:1.6;color:#1565C0;text-align:center;}
+.sa-block{display:inline-block;padding:2px 8px;border-radius:6px;margin:2px;font-size:0.72rem;font-weight:600;}
+.sa-block.noun{background:#E8F5E9;color:#2E7D32;}.sa-block.particle{background:#FFEBEE;color:#C62828;}.sa-block.verb{background:#E3F2FD;color:#1565C0;}.sa-block.other{background:#FFF3E0;color:#E65100;}
 .sa-compare{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:6px 0;}
-.sa-compare div{padding:8px 10px;border-radius:8px;font-size:0.78rem;line-height:1.7;}
-.sa-compare .sa-cn{background:rgba(255,152,0,0.1);border:1px solid rgba(255,152,0,0.3);}
-.sa-compare .sa-jp{background:rgba(179,157,219,0.1);border:1px solid rgba(179,157,219,0.3);}
-.sa-insight{font-size:0.82rem;color:#C8C0B8;line-height:1.7;padding:8px 0;}
-.sa-insight b{color:#D1C4E9;}
+.sa-compare div{padding:6px 8px;border-radius:8px;font-size:0.72rem;line-height:1.5;}
+.sa-compare .sa-cn{background:rgba(255,152,0,0.08);border:1px solid rgba(255,152,0,0.2);}
+.sa-compare .sa-jp{background:rgba(103,58,183,0.08);border:1px solid rgba(103,58,183,0.2);}
+.sa-insight{font-size:0.72rem;color:#555;line-height:1.6;padding:6px 0;}
+.sa-insight b{color:#673AB7;}
+.jp-speak-btn{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border:none;border-radius:50%;background:rgba(123,157,171,0.2);color:var(--tile-verb);font-size:0.65rem;cursor:pointer;margin-left:4px;vertical-align:middle;transition:all 0.15s;flex-shrink:0;padding:0;line-height:1;}
+.jp-speak-btn:hover{background:rgba(123,157,171,0.35);transform:scale(1.1);}
+.jp-speak-btn:active{transform:scale(0.9);}
+.jp-speak-btn.playing{background:rgba(123,157,171,0.4);animation:speakPulse 0.8s infinite;}
+@keyframes speakPulse{0%,100%{opacity:1;}50%{opacity:0.5;}}
+.gm-compare-text{display:inline;}.gm-compare-row{display:flex;align-items:center;}
+.gm-step-text .jp-speak-btn,.gm-example-jp .jp-speak-btn{margin-left:6px;}
+.sa-block .jp-speak-btn{width:18px;height:18px;font-size:0.55rem;margin-left:2px;margin-top:2px;display:inline-flex;}
+.sa-jp .jp-speak-btn{margin-left:4px;}
 .score-popup{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) scale(0);background:var(--surface);border:2px solid var(--gold);padding:20px 30px;border-radius:20px;text-align:center;z-index:20000;}
 .score-popup.show{animation:popScale 0.5s forwards;}
 @keyframes popScale{0%{transform:translate(-50%,-50%) scale(0)}80%{transform:translate(-50%,-50%) scale(1.08)}100%{transform:translate(-50%,-50%) scale(1)}}
@@ -207,10 +216,10 @@ body{font-family:'Noto Sans TC','M PLUS Rounded 1c',sans-serif;background:var(--
 </div></div>
 <div class="modal-overlay" id="structure-modal"><div class="gm" style="max-width:460px;">
 <div class="gm-title" id="sm-title" style="font-size:0.95rem;">🔬 構句解析</div>
-<div class="gm-body" id="sm-body" style="font-size:0.85rem;line-height:1.75;user-select:text;-webkit-user-select:text;letter-spacing:0.02em;"></div>
+<div class="gm-body" id="sm-body" style="font-size:0.78rem;line-height:1.7;user-select:text;-webkit-user-select:text;"></div>
 <div style="display:flex;gap:8px;justify-content:center;">
-<button class="gm-close" style="background:rgba(179,157,219,0.15);color:#D1C4E9;font-size:0.7rem;" onclick="readStructureAnalysis()">🔊 唸給我聽</button>
-<button class="gm-close" style="background:rgba(100,181,246,0.15);color:#90CAF9;font-size:0.7rem;" onclick="shareStructureAnalysis()">📤 分享</button>
+<button class="gm-close" style="background:rgba(103,58,183,0.1);color:#673AB7;font-size:0.7rem;" onclick="readStructureAnalysis()">🔊 唸給我聽</button>
+<button class="gm-close" style="background:rgba(33,150,243,0.1);color:#2196F3;font-size:0.7rem;" onclick="shareStructureAnalysis()">📤 分享</button>
 <button class="gm-close" onclick="document.getElementById('structure-modal').classList.remove('open');synth.cancel();">知道了！</button>
 </div>
 </div></div>
@@ -413,6 +422,17 @@ const GRAMMAR_PROMPT=`你是精通日文與繁體中文（台灣慣用語）的�
 function findVoice(){const v=synth.getVoices();jpVoice=v.find(x=>x.lang==='ja-JP'&&x.name.includes('Google'))||v.find(x=>x.lang==='ja-JP')||null;}
 synth.addEventListener('voiceschanged',findVoice);findVoice();
 function speakJP(t,r=0.8){synth.cancel();return new Promise(res=>{const u=new SpeechSynthesisUtterance(t);u.lang='ja-JP';u.rate=r;if(jpVoice)u.voice=jpVoice;u.onend=res;u.onerror=res;synth.speak(u);})}
+function jpSpeakBtnHtml(text,rate){
+  const t=text.replace(/'/g,'&#39;').replace(/"/g,'&quot;');
+  const r=rate||0.8;
+  return '<button class="jp-speak-btn" onclick="event.stopPropagation();this.classList.add(\'playing\');speakJP(\''+t+'\','+r+').then(()=>this.classList.remove(\'playing\'))" title="播放發音">🔊</button>';
+}
+function extractJP(text){
+  const m=text.match(/[：:]\s*(.+)$/);
+  if(m)return m[1].trim();
+  const jp=text.match(/[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\u3000-\u303F]+/g);
+  return jp?jp.join(''):'';
+}
 function hasKanji(t){return/[\u4E00-\u9FFF\u3400-\u4DBF]/.test(t);}
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;let recognition;
 if(SR){recognition=new SR();recognition.lang='ja-JP';recognition.interimResults=false;}
@@ -742,6 +762,7 @@ function showGrammarModal(info, chunkText){
   const masteryKey=kind+'_'+(chunkText||info.title||'');
   const masteryCount=getMastery()[masteryKey]||0;
   titleEl.innerHTML='<span>'+escapeHtml(info.title||'文法解說')+'</span>'+
+    (chunkText?jpSpeakBtnHtml(chunkText):'')+
     (masteryCount>0?'<span class="gm-mastery-badge">已掌握 '+masteryCount+' 次 ✓</span>':'');
   // Detect if this entry has the new structured fields
   const hasStructured=!!(info.metaphor||info.compare||(Array.isArray(info.steps)&&info.steps.length)||(Array.isArray(info.examples)&&info.examples.length)||info.quiz);
@@ -758,21 +779,21 @@ function showGrammarModal(info, chunkText){
   if(info.compare&&(info.compare.cn||info.compare.jp||info.compare.note)){
     html+='<div class="gm-compare">';
     if(info.compare.cn)html+='<div class="gm-compare-row"><span class="gm-compare-flag">🇹🇼</span><span class="gm-compare-text">'+escapeHtml(info.compare.cn)+'</span></div>';
-    if(info.compare.jp)html+='<div class="gm-compare-row"><span class="gm-compare-flag">🇯🇵</span><span class="gm-compare-text">'+escapeHtml(info.compare.jp)+'</span></div>';
+    if(info.compare.jp)html+='<div class="gm-compare-row"><span class="gm-compare-flag">🇯🇵</span><span class="gm-compare-text">'+escapeHtml(info.compare.jp)+'</span>'+jpSpeakBtnHtml(info.compare.jp)+'</div>';
     if(info.compare.note)html+='<div class="gm-compare-note">'+escapeHtml(info.compare.note)+'</div>';
     html+='</div>';
   }
   // Steps (decision tree)
   if(Array.isArray(info.steps)&&info.steps.length){
     html+='<div class="gm-section"><div class="gm-section-label">🎯 判斷步驟</div><div class="gm-steps">';
-    info.steps.forEach((s,i)=>{html+='<div class="gm-step"><span class="gm-step-num">'+(i+1)+'</span><span class="gm-step-text">'+escapeHtml(s)+'</span></div>';});
+    info.steps.forEach((s,i)=>{const jp=extractJP(s);html+='<div class="gm-step"><span class="gm-step-num">'+(i+1)+'</span><span class="gm-step-text">'+escapeHtml(s)+(jp?jpSpeakBtnHtml(jp):'')+'</span></div>';});
     html+='</div></div>';
   }
   // Examples
   if(Array.isArray(info.examples)&&info.examples.length){
     html+='<div class="gm-section"><div class="gm-section-label">📖 例句</div><div class="gm-examples">';
     info.examples.forEach(ex=>{
-      html+='<div class="gm-example"><div class="gm-example-jp">'+escapeHtml(ex.jp||'')+'</div>';
+      html+='<div class="gm-example"><div class="gm-example-jp">'+escapeHtml(ex.jp||'')+jpSpeakBtnHtml(ex.jp||'')+'</div>';
       if(ex.cn)html+='<div class="gm-example-cn">'+escapeHtml(ex.cn)+'</div>';
       html+='</div>';
     });
@@ -1180,7 +1201,7 @@ async function openStructureModal() {
 }
 
 function renderStructureModal(data) {
-  document.getElementById('sm-title').textContent = '🔬 ' + (data.title || '構句解析');
+  document.getElementById('sm-title').innerHTML = '🔬 ' + escapeHtml(data.title || '構句解析') + (data.title ? ' ' + jpSpeakBtnHtml(data.title, 0.75) : '');
   let html = '';
 
   // Formula
@@ -1193,7 +1214,7 @@ function renderStructureModal(data) {
     html += '<div style="margin:8px 0;text-align:center;">';
     data.blocks.forEach(b => {
       const cls = b.type === 'noun' ? 'noun' : b.type === 'particle' ? 'particle' : b.type === 'verb' ? 'verb' : 'other';
-      html += '<span class="sa-block ' + cls + '" title="' + (b.role || '') + '">' + b.text + '<br><span style="font-size:0.6rem;font-weight:400;opacity:0.8;">' + (b.role || '') + '</span></span>';
+      html += '<span class="sa-block ' + cls + '" title="' + (b.role || '') + '">' + b.text + jpSpeakBtnHtml(b.text, 0.75) + '<br><span style="font-size:0.55rem;font-weight:400;opacity:0.7;">' + (b.role || '') + '</span></span>';
     });
     html += '</div>';
   }
@@ -1202,10 +1223,10 @@ function renderStructureModal(data) {
   if (data.compare) {
     html += '<div class="sa-compare">';
     html += '<div class="sa-cn"><b>🇹🇼 中文</b><br>' + data.compare.cn + '</div>';
-    html += '<div class="sa-jp"><b>🇯🇵 日文</b><br>' + data.compare.jp + '</div>';
+    html += '<div class="sa-jp"><b>🇯🇵 日文</b><br>' + data.compare.jp + jpSpeakBtnHtml(data.compare.jp) + '</div>';
     html += '</div>';
     if (data.compare.diff) {
-      html += '<div style="font-size:0.75rem;color:#B8B0A8;text-align:center;margin:6px 0;">💡 ' + data.compare.diff + '</div>';
+      html += '<div style="font-size:0.68rem;color:#888;text-align:center;margin:4px 0;">💡 ' + data.compare.diff + '</div>';
     }
   }
 
@@ -1219,7 +1240,7 @@ function renderStructureModal(data) {
 
   // Summary
   if (data.summary) {
-    html += '<div style="text-align:center;padding:10px;margin-top:10px;background:rgba(179,157,219,0.1);border-radius:10px;font-size:0.82rem;font-weight:600;color:#FFB74D;border:1px solid rgba(179,157,219,0.15);">📐 ' + data.summary + '</div>';
+    html += '<div style="text-align:center;padding:8px;margin-top:8px;background:rgba(103,58,183,0.06);border-radius:10px;font-size:0.8rem;font-weight:600;color:#673AB7;">📐 ' + data.summary + '</div>';
   }
 
   document.getElementById('sm-body').innerHTML = html;
